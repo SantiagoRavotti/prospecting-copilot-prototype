@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-ssr/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env files — never commit secrets (the prototype uses none, keep it that way)
+.env
+.env.*
+*.local
+
+# Logs
+*.log
+npm-debug.log*
