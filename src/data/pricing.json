@@ -1,0 +1,61 @@
+{
+  "note": "Local pricing configuration for the prototype cost estimator. Pricing estimates must be verified before production implementation.",
+  "checkedAt": "2026-08-03",
+  "usdToEur": 0.92,
+  "sources": {
+    "anthropic": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "search": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "database": "https://neon.tech/pricing",
+    "hosting": "https://pages.github.com/",
+    "enrichment": "https://hunter.io/pricing"
+  },
+  "aiModels": {
+    "low": {
+      "label": "Claude Haiku 4.5",
+      "inputUsdPerMTok": 1.0,
+      "outputUsdPerMTok": 5.0,
+      "batchInputUsdPerMTok": 0.5,
+      "batchOutputUsdPerMTok": 2.5
+    },
+    "capable": {
+      "label": "Claude Sonnet 5 (post-intro pricing)",
+      "inputUsdPerMTok": 3.0,
+      "outputUsdPerMTok": 15.0,
+      "batchInputUsdPerMTok": 1.5,
+      "batchOutputUsdPerMTok": 7.5
+    }
+  },
+  "searchUsdPer1000": 10.0,
+  "databasePlans": [
+    { "id": "free", "label": "Managed Postgres — free tier", "usdPerMonth": 0 },
+    { "id": "starter", "label": "Managed Postgres — starter (~$19)", "usdPerMonth": 19 },
+    { "id": "pro", "label": "Managed Postgres — pro (~$69)", "usdPerMonth": 69 }
+  ],
+  "hostingPlans": [
+    { "id": "pages", "label": "GitHub/Cloudflare Pages (static) — free", "usdPerMonth": 0 },
+    { "id": "hobby", "label": "Hobby API host (~$5)", "usdPerMonth": 5 },
+    { "id": "small", "label": "Small production host (~$20)", "usdPerMonth": 20 }
+  ],
+  "enrichmentProviders": [
+    {
+      "id": "none",
+      "label": "None (recommended for MVP)",
+      "usdPerMonth": 0,
+      "usdPerVerification": 0
+    },
+    {
+      "id": "hunter-starter",
+      "label": "Hunter.io Starter (~$37/mo, 1000 verifications incl.)",
+      "usdPerMonth": 37,
+      "usdPerVerification": 0.01,
+      "includedVerifications": 1000
+    },
+    {
+      "id": "apollo-basic",
+      "label": "Apollo.io Basic (~$49/mo)",
+      "usdPerMonth": 49,
+      "usdPerVerification": 0.005,
+      "includedVerifications": 1000
+    }
+  ]
+}
