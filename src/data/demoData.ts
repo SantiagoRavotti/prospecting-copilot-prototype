@@ -13,6 +13,7 @@ import type {
 import { computeScore, normalizeSeniority, priorityForScore } from '../lib/scoring';
 import { generateDraft } from '../lib/templates';
 import { daysFromNow, firstNameOf, lastNameOf, uid } from '../lib/utils';
+import { buildDemoOpportunities, DEMO_SOURCES } from './demoOpportunities';
 
 export const WS_IMPACT_HYDROGEN_ID = 'ws-impact-hydrogen';
 export const WS_SANTIAGO_ID = 'ws-santiago-personal';
@@ -1558,7 +1559,7 @@ export function buildDemoState(): AppState {
   }));
 
   return {
-    version: 1,
+    version: 2,
     activeWorkspaceId: WS_IMPACT_HYDROGEN_ID,
     workspaces: structuredClone(DEMO_WORKSPACES),
     companies,
@@ -1566,6 +1567,9 @@ export function buildDemoState(): AppState {
     prospects,
     activities,
     followUps,
+    opportunities: buildDemoOpportunities(),
+    opportunitySources: structuredClone(DEMO_SOURCES),
+    opportunityAlerts: [],
   };
 }
 

@@ -169,6 +169,8 @@ export interface FollowUp {
   completedAt: string | null;
 }
 
+import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
+
 export interface AppState {
   version: number;
   activeWorkspaceId: string;
@@ -178,4 +180,7 @@ export interface AppState {
   prospects: Prospect[];
   activities: Activity[];
   followUps: FollowUp[];
+  opportunities: Opportunity[];
+  opportunitySources: OpportunitySource[];
+  opportunityAlerts: OpportunityAlert[];
 }

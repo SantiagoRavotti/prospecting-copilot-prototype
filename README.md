@@ -53,6 +53,10 @@ Keyboard shortcuts in card mode: `C` copy · `O` open LinkedIn · `S` sent ·
 
 Dashboard · Today's Prospects (card + table) · Companies · People (search,
 filters, CSV import, CSV/XLSX/JSON export) · Follow-ups · Pipeline (kanban) ·
+**Tenders & Opportunities** (consulting-opportunity intelligence: explainable
+match scoring, saved list, application pipeline, editable sources registry,
+alerts, delivery-cost estimate vs. budget, manual "Analyze this opportunity"
+entry — see [docs/OPPORTUNITIES_MODULE.md](docs/OPPORTUNITIES_MODULE.md)) ·
 Analytics · Cost Estimator (future MVP monthly-cost model with €100 warning) ·
 Settings (workspace config, backup import/export, demo reset).
 

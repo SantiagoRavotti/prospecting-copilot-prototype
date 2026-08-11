@@ -1,6 +1,31 @@
 // Display metadata for statuses, priorities and confidence levels.
 
 import type { Priority, ProspectStatus, ResearchConfidence } from './types';
+import type { OpportunityStatus } from './opportunityTypes';
+
+export const OPPORTUNITY_STATUS_LABELS: Record<OpportunityStatus, string> = {
+  new: 'New',
+  review: 'Review',
+  go: 'Go',
+  partner_search: 'Partner search',
+  preparing_bid: 'Preparing bid',
+  submitted: 'Submitted',
+  won: 'Won',
+  lost: 'Lost',
+  discarded: 'Discarded',
+};
+
+export const OPPORTUNITY_STATUS_COLORS: Record<OpportunityStatus, string> = {
+  new: 'bg-slate-100 text-slate-700 border-slate-200',
+  review: 'bg-blue-50 text-blue-700 border-blue-200',
+  go: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  partner_search: 'bg-amber-50 text-amber-700 border-amber-200',
+  preparing_bid: 'bg-violet-50 text-violet-700 border-violet-200',
+  submitted: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  won: 'bg-green-50 text-green-800 border-green-300',
+  lost: 'bg-rose-50 text-rose-700 border-rose-200',
+  discarded: 'bg-gray-100 text-gray-500 border-gray-200',
+};
 
 export const STATUS_LABELS: Record<ProspectStatus, string> = {
   new: 'New',

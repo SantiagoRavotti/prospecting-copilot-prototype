@@ -13,6 +13,7 @@ import type {
   ProspectStatus,
   Workspace,
 } from './types';
+import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
 import { buildDemoState } from '../data/demoData';
 import { nowIso, uid } from './utils';
 
@@ -20,6 +21,19 @@ export const STORAGE_KEY = 'prospecting-copilot-state-v1';
 
 let state: AppState = loadInitialState();
 const listeners = new Set<() => void>();
+
+/** Migrate v1 state (pre-Opportunities) to v2 by adding the new collections. */
+export function migrateState(parsed: AppState): AppState {
+  if (parsed.version >= 2) return parsed;
+  const demo = buildDemoState();
+  return {
+    ...parsed,
+    version: 2,
+    opportunities: parsed.opportunities ?? demo.opportunities,
+    opportunitySources: parsed.opportunitySources ?? demo.opportunitySources,
+    opportunityAlerts: parsed.opportunityAlerts ?? [],
+  };
+}
 
 function loadInitialState(): AppState {
   if (typeof localStorage === 'undefined') return buildDemoState();
@@ -30,12 +44,14 @@ function loadInitialState(): AppState {
     if (
       !parsed ||
       typeof parsed !== 'object' ||
-      parsed.version !== 1 ||
+      typeof parsed.version !== 'number' ||
+      parsed.version < 1 ||
+      parsed.version > 2 ||
       !Array.isArray(parsed.prospects)
     ) {
       return persist(buildDemoState());
     }
-    return parsed;
+    return persist(migrateState(parsed));
   } catch {
     return persist(buildDemoState());
   }
@@ -329,15 +345,15 @@ export function resetDemoData(): void {
 }
 
 export function replaceState(next: AppState): void {
-  setState(() => next);
+  setState(() => migrateState(next));
 }
 
-/** Validate a parsed backup before importing it. */
+/** Validate a parsed backup before importing it (v1 backups are migrated). */
 export function isValidBackup(value: unknown): value is AppState {
   if (!value || typeof value !== 'object') return false;
   const v = value as Record<string, unknown>;
   return (
-    v.version === 1 &&
+    (v.version === 1 || v.version === 2) &&
     typeof v.activeWorkspaceId === 'string' &&
     Array.isArray(v.workspaces) &&
     Array.isArray(v.companies) &&
@@ -346,4 +362,92 @@ export function isValidBackup(value: unknown): value is AppState {
     Array.isArray(v.activities) &&
     Array.isArray(v.followUps)
   );
+}
+
+// ---------------------------------------------------------------------------
+// Opportunities
+// ---------------------------------------------------------------------------
+
+export function addOpportunity(opportunity: Opportunity): void {
+  setState((prev) => ({ ...prev, opportunities: [opportunity, ...prev.opportunities] }));
+}
+
+export function updateOpportunity(id: string, patch: Partial<Opportunity>, event?: string): void {
+  setState((prev) => ({
+    ...prev,
+    opportunities: prev.opportunities.map((o) =>
+      o.id === id
+        ? {
+            ...o,
+            ...patch,
+            history: event ? [...o.history, { at: nowIso(), event }] : o.history,
+          }
+        : o,
+    ),
+  }));
+}
+
+export function changeOpportunityStatus(id: string, status: Opportunity['status']): void {
+  setState((prev) => ({
+    ...prev,
+    opportunities: prev.opportunities.map((o) =>
+      o.id === id && o.status !== status
+        ? {
+            ...o,
+            status,
+            history: [
+              ...o.history,
+              { at: nowIso(), event: `Status changed to ${status.replace(/_/g, ' ')}.` },
+            ],
+          }
+        : o,
+    ),
+  }));
+}
+
+export function toggleOpportunitySaved(id: string): void {
+  setState((prev) => ({
+    ...prev,
+    opportunities: prev.opportunities.map((o) =>
+      o.id === id
+        ? {
+            ...o,
+            saved: !o.saved,
+            history: [
+              ...o.history,
+              { at: nowIso(), event: o.saved ? 'Removed from saved.' : 'Saved.' },
+            ],
+          }
+        : o,
+    ),
+  }));
+}
+
+export function addOpportunitySource(source: OpportunitySource): void {
+  setState((prev) => ({ ...prev, opportunitySources: [...prev.opportunitySources, source] }));
+}
+
+export function updateOpportunitySource(id: string, patch: Partial<OpportunitySource>): void {
+  setState((prev) => ({
+    ...prev,
+    opportunitySources: prev.opportunitySources.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+  }));
+}
+
+export function removeOpportunitySource(id: string): void {
+  setState((prev) => ({
+    ...prev,
+    opportunitySources: prev.opportunitySources.filter((s) => s.id !== id),
+  }));
+}
+
+export function addOpportunityAlert(alert: OpportunityAlert): void {
+  setState((prev) => ({ ...prev, opportunityAlerts: [...prev.opportunityAlerts, alert] }));
+}
+
+export function removeOpportunityAlert(id: string): void {
+  setState((prev) => ({
+    ...prev,
+    opportunityAlerts: prev.opportunityAlerts.filter((a) => a.id !== id),
+  }));
 }

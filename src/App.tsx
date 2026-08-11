@@ -5,6 +5,7 @@ import {
   CalendarClock,
   Calculator,
   Kanban,
+  Landmark,
   LayoutDashboard,
   Settings as SettingsIcon,
   Sparkles,
@@ -18,6 +19,7 @@ import Companies from './pages/Companies';
 import People from './pages/People';
 import FollowUps from './pages/FollowUps';
 import Pipeline from './pages/Pipeline';
+import Opportunities from './pages/Opportunities';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import CostEstimator from './pages/CostEstimator';
@@ -29,6 +31,7 @@ const NAV = [
   { to: '/people', label: 'People', icon: Users },
   { to: '/follow-ups', label: 'Follow-ups', icon: CalendarClock },
   { to: '/pipeline', label: 'Pipeline', icon: Kanban },
+  { to: '/opportunities', label: 'Opportunities', icon: Landmark },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
   { to: '/cost-estimator', label: 'Cost Estimator', icon: Calculator },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
@@ -131,6 +134,7 @@ export default function App() {
           <Route path="/people" element={<People />} />
           <Route path="/follow-ups" element={<FollowUps />} />
           <Route path="/pipeline" element={<Pipeline />} />
+          <Route path="/opportunities" element={<Opportunities />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cost-estimator" element={<CostEstimator />} />
           <Route path="/settings" element={<Settings />} />
