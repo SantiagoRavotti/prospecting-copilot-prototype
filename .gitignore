@@ -24,6 +24,10 @@ Thumbs.db
 .env.*
 *.local
 
+# Supabase CLI local artifacts (may contain connection details)
+supabase/.temp/
+supabase/.branches/
+
 # Logs
 *.log
 npm-debug.log*
