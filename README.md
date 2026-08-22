@@ -1,9 +1,19 @@
-# Prospecting Copilot — Prototype
+# Prospecting Copilot
 
-An interactive frontend prototype for validating a prospecting workflow:
-research, prioritization and LinkedIn-message editing concentrated in one
-review interface. Built for **Impact Hydrogen** business development and for
-**Santiago Ravotti's** personal networking.
+A prospecting workflow app: research, prioritization and LinkedIn-message
+editing concentrated in one review interface. Built for **Impact Hydrogen**
+business development and for **Santiago Ravotti's** personal networking.
+
+## Two modes (Sprint 1)
+
+- **Cloud mode** — build with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`
+  (publishable key): magic-link login (invite-only), per-user workspaces,
+  Postgres + RLS on Supabase (EU/Frankfurt), write-through sync with
+  localStorage as offline cache. See [docs/SPRINT1_NOTES.md](docs/SPRINT1_NOTES.md)
+  for the operator runbook.
+- **Local mode** — no env vars (or `VITE_FORCE_LOCAL=1`): the original
+  prototype below, all data in the browser. The automated test suites run in
+  this mode.
 
 > **Prototype honesty rules**
 >

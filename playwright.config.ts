@@ -17,5 +17,8 @@ export default defineConfig({
     port: 4173,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
+    // The e2e suite exercises the local/demo prototype: force local mode so a
+    // developer's .env.local (cloud credentials) can't flip the app to AuthGate.
+    env: { VITE_FORCE_LOCAL: '1' },
   },
 });

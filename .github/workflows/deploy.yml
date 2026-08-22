@@ -29,6 +29,12 @@ jobs:
       - run: npm run build
         env:
           GITHUB_PAGES: 'true'
+          # Cloud mode: when these secrets are set, the deployed build requires
+          # login (Supabase Auth + RLS). Anon key is public by design.
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_PUBLIC_URL: 'https://santiagoravotti.github.io/prospecting-copilot-prototype/'
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

@@ -1,0 +1,31 @@
+# Weekly REST ping so the Supabase free-tier project is never paused for
+# inactivity. Uses only the public anon key; RLS applies as usual.
+
+name: Supabase keep-alive ping
+
+on:
+  schedule:
+    - cron: '0 8 * * 4' # Thursdays 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping PostgREST
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/channel_limits?select=channel&limit=1")
+          echo "Supabase responded with HTTP $code"
+          # Any HTTP response proves the project is awake (401/200 both fine).
+          if [ "$code" -ge 500 ] || [ "$code" -eq 000 ]; then
+            echo "Project appears unreachable"; exit 1
+          fi

@@ -1,0 +1,49 @@
+# Cross-tenant isolation test against a throwaway local Supabase stack.
+# Runs the migrations, spins up supabase start (Docker), and executes the
+# e2e-db suite with the local anon/service keys. No production secrets used.
+
+name: RLS isolation tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Node 22: native WebSocket, required by supabase-js realtime in Node.
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Start local Supabase (applies migrations)
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - name: Export local stack credentials
+        run: |
+          supabase status -o env | tee /tmp/supabase.env
+          grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' /tmp/supabase.env >> "$GITHUB_ENV" || true
+          # Newer CLI variable names
+          grep -E '^(SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' /tmp/supabase.env >> "$GITHUB_ENV" || true
+
+      - name: Run RLS integration suite
+        env:
+          SUPABASE_TEST_URL: ${{ env.API_URL || env.SUPABASE_URL }}
+          SUPABASE_TEST_ANON_KEY: ${{ env.ANON_KEY || env.SUPABASE_ANON_KEY }}
+          SUPABASE_TEST_SERVICE_KEY: ${{ env.SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run test:rls
+
+      - name: Stop Supabase
+        if: always()
+        run: supabase stop --no-backup
