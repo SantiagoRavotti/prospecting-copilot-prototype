@@ -11,7 +11,10 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { LogOut } from 'lucide-react';
 import { activeWorkspace, setActiveWorkspace, useAppState } from './lib/store';
+import { isCloudMode, supabase } from './lib/supabaseClient';
 import { cn } from './lib/utils';
 import Dashboard from './pages/Dashboard';
 import TodayProspects from './pages/TodayProspects';
@@ -36,6 +39,27 @@ const NAV = [
   { to: '/cost-estimator', label: 'Cost Estimator', icon: Calculator },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
+
+function SessionFooter() {
+  const [email, setEmail] = useState('');
+  useEffect(() => {
+    void supabase?.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? ''));
+  }, []);
+  return (
+    <div className="flex items-center justify-between gap-2" data-testid="session-footer">
+      <p className="truncate text-[11px] leading-snug text-slate-500" title={email}>
+        {email || 'Signed in'}
+      </p>
+      <button
+        className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-700"
+        onClick={() => void supabase?.auth.signOut()}
+        data-testid="sign-out"
+      >
+        <LogOut className="h-3 w-3" /> Sign out
+      </button>
+    </div>
+  );
+}
 
 export default function App() {
   const state = useAppState();
@@ -101,9 +125,13 @@ export default function App() {
         </nav>
 
         <div className="border-t border-slate-100 px-5 py-3">
-          <p className="text-[11px] leading-snug text-slate-400">
-            No external APIs connected. All data stays in this browser.
-          </p>
+          {isCloudMode() ? (
+            <SessionFooter />
+          ) : (
+            <p className="text-[11px] leading-snug text-slate-400">
+              No external APIs connected. All data stays in this browser.
+            </p>
+          )}
         </div>
       </aside>
 

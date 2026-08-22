@@ -12,6 +12,8 @@ import {
   useAppState,
 } from '../lib/store';
 import { exportBackup } from '../lib/exporters';
+import { importBackupToCloud } from '../lib/backupImport';
+import { isCloudMode, supabase } from '../lib/supabaseClient';
 import {
   Button,
   Card,
@@ -57,17 +59,31 @@ export default function Settings() {
 
   const importBackup = (file: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed: unknown = JSON.parse(String(reader.result ?? ''));
         if (!isValidBackup(parsed)) {
           toast('Not a valid Prospecting Copilot backup file.', 'error');
           return;
         }
-        replaceState(parsed);
-        toast('Backup imported — all local data replaced.', 'success');
-      } catch {
-        toast('Could not parse the backup file.', 'error');
+        if (isCloudMode() && supabase) {
+          // One-shot migration of prototype data into the cloud account.
+          const { data } = await supabase.auth.getUser();
+          if (!data.user) {
+            toast('Sign in first to import into the cloud.', 'error');
+            return;
+          }
+          const summary = await importBackupToCloud(parsed, data.user.id);
+          toast(
+            `Imported to cloud: ${summary.prospects} prospects, ${summary.opportunities} opportunities.`,
+            'success',
+          );
+        } else {
+          replaceState(parsed);
+          toast('Backup imported — all local data replaced.', 'success');
+        }
+      } catch (e) {
+        toast(e instanceof Error ? e.message : 'Could not parse the backup file.', 'error');
       }
     };
     reader.readAsText(file);
@@ -266,9 +282,11 @@ export default function Settings() {
               e.target.value = '';
             }}
           />
-          <Button variant="danger" onClick={() => setConfirmReset(true)} data-testid="reset-demo">
-            <RotateCcw className="h-4 w-4" /> Reset demo data
-          </Button>
+          {!isCloudMode() && (
+            <Button variant="danger" onClick={() => setConfirmReset(true)} data-testid="reset-demo">
+              <RotateCcw className="h-4 w-4" /> Reset demo data
+            </Button>
+          )}
         </div>
       </Card>
 

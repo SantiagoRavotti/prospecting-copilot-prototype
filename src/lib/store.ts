@@ -15,6 +15,9 @@ import type {
 } from './types';
 import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
 import { buildDemoState } from '../data/demoData';
+import { isCloudMode } from './supabaseClient';
+import { emptyCloudState } from './sync/mappers';
+import { sanitizeForPersist } from './secretsGuard';
 import { nowIso, uid } from './utils';
 
 export const STORAGE_KEY = 'prospecting-copilot-state-v1';
@@ -36,10 +39,14 @@ export function migrateState(parsed: AppState): AppState {
 }
 
 function loadInitialState(): AppState {
-  if (typeof localStorage === 'undefined') return buildDemoState();
+  // Cloud mode: start empty; AuthGate hydrates from Supabase after login.
+  // localStorage acts as offline cache between sessions.
+  if (typeof localStorage === 'undefined') {
+    return isCloudMode() ? emptyCloudState() : buildDemoState();
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return persist(buildDemoState());
+    if (!raw) return persist(isCloudMode() ? emptyCloudState() : buildDemoState());
     const parsed = JSON.parse(raw) as AppState;
     if (
       !parsed ||
@@ -59,7 +66,9 @@ function loadInitialState(): AppState {
 
 function persist(next: AppState): AppState {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    // Security invariant: the persisted client state must never contain
+    // provider credentials or anything matching an Anthropic API key.
+    localStorage.setItem(STORAGE_KEY, sanitizeForPersist(next));
   } catch {
     // Storage full or unavailable — keep working in memory.
   }
@@ -78,6 +87,11 @@ export function setState(updater: (prev: AppState) => AppState): void {
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** External subscription point for the cloud sync engine. */
+export function subscribeToStore(listener: () => void): () => void {
+  return subscribe(listener);
 }
 
 export function useAppState(): AppState {

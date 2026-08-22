@@ -20,5 +20,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    // Unit tests always exercise local/demo mode, regardless of a developer's
+    // .env.local cloud credentials (also avoids realtime-js needing WebSocket).
+    env: { VITE_FORCE_LOCAL: '1' },
   },
 });

@@ -14,10 +14,13 @@
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:rls": "vitest run --config vitest.rls.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
+    "@sentry/react": "^10.70.0",
+    "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-table": "^8.20.5",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
