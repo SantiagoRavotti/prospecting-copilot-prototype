@@ -32,16 +32,21 @@ jobs:
       - run: supabase start
       - name: Export local stack credentials
         run: |
-          supabase status -o env | tee /tmp/supabase.env
-          grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY)=' /tmp/supabase.env >> "$GITHUB_ENV" || true
-          # Newer CLI variable names
-          grep -E '^(SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY)=' /tmp/supabase.env >> "$GITHUB_ENV" || true
+          # `status -o env` emits quoted assignments (VAR="value"); source them
+          # so the quotes are interpreted instead of leaking into the values.
+          supabase status -o env > /tmp/supabase.env
+          set -a
+          # shellcheck disable=SC1091
+          source /tmp/supabase.env
+          set +a
+          {
+            echo "SUPABASE_TEST_URL=${API_URL:-${SUPABASE_URL:-}}"
+            echo "SUPABASE_TEST_ANON_KEY=${ANON_KEY:-${SUPABASE_ANON_KEY:-}}"
+            echo "SUPABASE_TEST_SERVICE_KEY=${SERVICE_ROLE_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-}}"
+          } >> "$GITHUB_ENV"
+          echo "URL exported: ${API_URL:-${SUPABASE_URL:-MISSING}}"
 
       - name: Run RLS integration suite
-        env:
-          SUPABASE_TEST_URL: ${{ env.API_URL || env.SUPABASE_URL }}
-          SUPABASE_TEST_ANON_KEY: ${{ env.ANON_KEY || env.SUPABASE_ANON_KEY }}
-          SUPABASE_TEST_SERVICE_KEY: ${{ env.SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_ROLE_KEY }}
         run: npm run test:rls
 
       - name: Stop Supabase
