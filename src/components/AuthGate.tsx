@@ -30,6 +30,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [wsName, setWsName] = useState('');
+  const [showImport, setShowImport] = useState(false);
   const [importSummary, setImportSummary] = useState<BackupImportResult | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const startedFor = useRef<string | null>(null);
@@ -215,33 +216,9 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return shell(
       <div data-testid="onboarding">
         <p className="text-sm font-medium text-slate-800">Welcome!</p>
-        <p className="mt-1 text-sm text-slate-500">Bring your prototype data or start fresh.</p>
+        <p className="mt-1 text-sm text-slate-500">Create your first workspace to get started.</p>
         {importSummary == null ? (
           <>
-            <Button
-              className="mt-4 w-full"
-              variant="outline"
-              loading={busy}
-              onClick={() => fileRef.current?.click()}
-              data-testid="onboarding-import"
-            >
-              <Upload className="h-4 w-4" /> Import prototype backup (JSON)
-            </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) importBackup(f);
-                e.target.value = '';
-              }}
-            />
-            <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
-              <span className="h-px flex-1 bg-slate-200" /> or{' '}
-              <span className="h-px flex-1 bg-slate-200" />
-            </div>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -258,6 +235,7 @@ export default function AuthGate({ children }: { children: ReactNode }) {
               }}
             >
               <Input
+                className="mt-4"
                 placeholder="Workspace name (e.g. Impact Hydrogen)"
                 value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
@@ -272,6 +250,40 @@ export default function AuthGate({ children }: { children: ReactNode }) {
                 Create workspace
               </Button>
             </form>
+
+            {/* Secondary, tucked away: returning prototype users only. */}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) importBackup(f);
+                e.target.value = '';
+              }}
+            />
+            {showImport ? (
+              <Button
+                className="mt-5 w-full"
+                variant="outline"
+                size="sm"
+                loading={busy}
+                onClick={() => fileRef.current?.click()}
+                data-testid="onboarding-import"
+              >
+                <Upload className="h-3.5 w-3.5" /> Elegir el archivo exportado
+              </Button>
+            ) : (
+              <button
+                type="button"
+                className="mt-5 w-full text-center text-xs text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+                onClick={() => setShowImport(true)}
+                data-testid="onboarding-import-link"
+              >
+                ¿Usabas la versión anterior? Importá tus datos
+              </button>
+            )}
           </>
         ) : (
           <Spinner label="Finishing import…" />
