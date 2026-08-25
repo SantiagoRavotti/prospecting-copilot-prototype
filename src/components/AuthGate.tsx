@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
+import * as Sentry from '@sentry/react';
 import { CloudOff, LogIn, Upload } from 'lucide-react';
 import {
   classifyAuthCallback,
@@ -42,7 +43,18 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       await startSync(s.user.id);
       setPhase('ready');
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'Could not load your data.');
+      // Surface the real cause: Supabase errors are not always Error instances.
+      const message =
+        (e instanceof Error && e.message) ||
+        (typeof e === 'object' &&
+          e !== null &&
+          'message' in e &&
+          String((e as { message: unknown }).message)) ||
+        'Could not load your data.';
+      console.error('[AuthGate] hydration failed:', e);
+      Sentry.captureException(e instanceof Error ? e : new Error(message));
+      startedFor.current = null; // allow Retry without a full reload
+      setErrorMsg(message);
       setPhase('error');
     }
   }, []);
@@ -63,7 +75,13 @@ export default function AuthGate({ children }: { children: ReactNode }) {
       setSession(s);
       if (s) {
         cleanAuthCallbackFromUrl();
-        void beginSession(s);
+        // CRITICAL: defer out of this callback. supabase-js holds its internal
+        // auth lock while dispatching events; hydration awaits `from()` calls
+        // that re-acquire that lock, which deadlocks/times out on the
+        // magic-link SIGNED_IN event (fired inside exchangeCodeForSession).
+        // Password/restored sessions don't hit this path — which is why the
+        // bug only appeared on real magic-link logins.
+        setTimeout(() => void beginSession(s), 0);
       } else {
         startedFor.current = null;
         stopSync();

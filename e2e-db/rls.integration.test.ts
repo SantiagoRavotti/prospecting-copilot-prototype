@@ -163,6 +163,60 @@ d('cross-tenant isolation (RLS)', () => {
   });
 });
 
+// Production bug repro (Sprint 1): a freshly invited user with no workspaces
+// must hydrate to an EMPTY state (→ onboarding screen), never to an error.
+// Exercises the real sync engine against a live stack, including the case
+// where the previous user was deleted and re-invited (fresh uid, no rows).
+d('fresh-user hydration (deleted & re-invited user)', () => {
+  it('startSync hydrates a brand-new user to empty state without throwing', async () => {
+    const admin = createClient(url!, serviceKey!, { auth: { persistSession: false } });
+    const stamp = Date.now();
+    const email = `fresh-${stamp}@rls-test.local`;
+    const password = `Str0ng!${stamp}fresh`;
+    const { data: created, error } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    expect(error).toBeNull();
+
+    // Simulate delete-and-reinvite: remove and recreate the same email.
+    const { error: delErr } = await admin.auth.admin.deleteUser(created.user!.id);
+    expect(delErr).toBeNull();
+    const { data: recreated, error: reErr } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    expect(reErr).toBeNull();
+
+    const freshClient = anonClient();
+    const { error: signInErr } = await freshClient.auth.signInWithPassword({ email, password });
+    expect(signInErr).toBeNull();
+
+    const { setSyncClientForTesting, startSync, stopSync } = await import('../src/lib/sync/engine');
+    const { getState } = await import('../src/lib/store');
+    setSyncClientForTesting(freshClient);
+    try {
+      // Must not throw (this was the production failure mode).
+      const hydrated = await startSync(recreated.user!.id);
+      expect(hydrated.workspaces).toHaveLength(0); // → onboarding, not error
+      expect(hydrated.prospects).toHaveLength(0);
+      expect(getState().workspaces).toHaveLength(0);
+      // The profile trigger ran for the recreated user.
+      const admin2 = createClient(url!, serviceKey!, { auth: { persistSession: false } });
+      const { data: profile } = await admin2
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', recreated.user!.id);
+      expect(profile).toHaveLength(1);
+    } finally {
+      stopSync();
+      setSyncClientForTesting(null);
+    }
+  }, 60_000);
+});
+
 if (!enabled) {
   describe('cross-tenant isolation (RLS)', () => {
     it.skip('skipped — set SUPABASE_TEST_URL/_ANON_KEY/_SERVICE_KEY to run', () => {});

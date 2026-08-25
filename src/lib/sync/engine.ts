@@ -80,9 +80,17 @@ interface EngineState {
 
 let engine: EngineState | null = null;
 
+let clientOverride: SupabaseClient | null = null;
+
+/** Test hook: run the engine against an injected client (integration tests). */
+export function setSyncClientForTesting(override: SupabaseClient | null): void {
+  clientOverride = override;
+}
+
 function client(): SupabaseClient {
-  if (!supabase) throw new Error('Sync engine requires cloud mode.');
-  return supabase;
+  const c = clientOverride ?? supabase;
+  if (!c) throw new Error('Sync engine requires cloud mode.');
+  return c;
 }
 
 function prospectWorkspace(state: AppState, prospectId: string): string {
@@ -256,7 +264,11 @@ export async function hydrateFromSupabase(): Promise<AppState> {
   const results = await Promise.all(
     tables.map(async (t) => {
       const { data, error } = await sb.from(t).select('*');
-      if (error) throw error;
+      if (error) {
+        // Always throw a real Error with the table name — PostgREST error
+        // objects are not reliably Error instances and lose context otherwise.
+        throw new Error(`Loading ${t} failed: ${error.message ?? JSON.stringify(error)}`);
+      }
       return data as Row[];
     }),
   );
