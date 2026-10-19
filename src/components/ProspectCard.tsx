@@ -7,6 +7,7 @@ import {
   Building2,
   CalendarPlus,
   ChevronDown,
+  MessagesSquare,
   ExternalLink,
   Globe,
   MapPin,
@@ -20,6 +21,7 @@ import { cn, daysFromNow, formatDateTime } from '../lib/utils';
 import { Button, Card, Dialog, Input, Kbd, Textarea } from './ui';
 import { ConfidenceBadge, DemoBadge, PriorityBadge, ScoreRing, StatusBadge } from './badges';
 import MessageEditor from './MessageEditor';
+import ConversationDialog from './ConversationDialog';
 import { useToast } from './toast';
 import { createFollowUp } from '../lib/store';
 
@@ -75,6 +77,7 @@ export default function ProspectCard({
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteText, setNoteText] = useState(prospect.notes);
   const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [conversationOpen, setConversationOpen] = useState(false);
   const [followUpDays, setFollowUpDays] = useState('7');
   const [followUpMsg, setFollowUpMsg] = useState('Check whether the connection was accepted.');
 
@@ -182,6 +185,14 @@ export default function ProspectCard({
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setFollowUpOpen(true)}>
           <CalendarPlus className="h-3.5 w-3.5" /> Follow-up
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setConversationOpen(true)}
+          data-testid="open-conversation"
+        >
+          <MessagesSquare className="h-3.5 w-3.5" /> Chat
         </Button>
       </div>
 
@@ -300,6 +311,13 @@ export default function ProspectCard({
           {prospect.sentAt && <span>Sent {formatDateTime(prospect.sentAt)}</span>}
         </div>
       )}
+
+      <ConversationDialog
+        prospect={prospect}
+        person={person}
+        open={conversationOpen}
+        onClose={() => setConversationOpen(false)}
+      />
 
       {/* Note dialog */}
       <Dialog open={noteOpen} onClose={() => setNoteOpen(false)} title="Prospect note">

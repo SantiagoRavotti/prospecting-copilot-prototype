@@ -31,3 +31,7 @@ supabase/.branches/
 # Logs
 *.log
 npm-debug.log*
+
+# Desktop build artifacts
+release/
+

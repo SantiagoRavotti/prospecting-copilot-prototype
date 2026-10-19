@@ -171,6 +171,23 @@ export interface FollowUp {
 
 import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
 
+export interface ConversationEntry {
+  id: string;
+  prospectId: string;
+  direction: 'sent' | 'received';
+  channel: 'linkedin';
+  text: string;
+  at: string;
+}
+
+export interface BridgeLogEntry {
+  at: string;
+  url: string;
+  title: string;
+  snippet: string;
+  ok: boolean;
+}
+
 export interface AppState {
   version: number;
   activeWorkspaceId: string;
@@ -183,4 +200,8 @@ export interface AppState {
   opportunities: Opportunity[];
   opportunitySources: OpportunitySource[];
   opportunityAlerts: OpportunityAlert[];
+  /** Desktop only: results of app↔agent↔Chrome bridge checks (CRM evidence). */
+  bridgeLog?: BridgeLogEntry[];
+  /** Per-prospect message threads (sent auto-logged; replies pasted by the user). */
+  conversations?: ConversationEntry[];
 }

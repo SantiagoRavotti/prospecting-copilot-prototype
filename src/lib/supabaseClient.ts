@@ -8,13 +8,16 @@
 // the router interprets them.
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { isDesktopMode } from './desktop';
 
 const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 const forceLocal = (import.meta.env.VITE_FORCE_LOCAL as string | undefined) === '1';
 
 export function isCloudMode(): boolean {
-  return !forceLocal && Boolean(url && anonKey);
+  // Desktop supersedes cloud: the installed app is local-first by design,
+  // even when Supabase env vars were baked into the bundle.
+  return !forceLocal && !isDesktopMode() && Boolean(url && anonKey);
 }
 
 export const supabase: SupabaseClient | null = isCloudMode()

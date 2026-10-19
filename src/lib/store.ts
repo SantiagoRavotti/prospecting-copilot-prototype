@@ -15,6 +15,8 @@ import type {
 } from './types';
 import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
 import { buildDemoState } from '../data/demoData';
+import { buildDesktopInitialState } from '../data/campaigns';
+import { desktopApi } from './desktop';
 import { isCloudMode } from './supabaseClient';
 import { emptyCloudState } from './sync/mappers';
 import { sanitizeForPersist } from './secretsGuard';
@@ -39,6 +41,22 @@ export function migrateState(parsed: AppState): AppState {
 }
 
 function loadInitialState(): AppState {
+  // Desktop mode: the state file (read synchronously by the preload) is the
+  // source of truth; first run seeds the two real campaigns, never demo data.
+  const desktop = desktopApi();
+  if (desktop) {
+    try {
+      if (desktop.initialState) {
+        const parsed = JSON.parse(desktop.initialState) as AppState;
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.prospects)) {
+          return migrateState(parsed);
+        }
+      }
+    } catch {
+      // fall through to a fresh desktop state
+    }
+    return persist(buildDesktopInitialState());
+  }
   // Cloud mode: start empty; AuthGate hydrates from Supabase after login.
   // localStorage acts as offline cache between sessions.
   if (typeof localStorage === 'undefined') {
@@ -65,12 +83,20 @@ function loadInitialState(): AppState {
 }
 
 function persist(next: AppState): AppState {
+  // Security invariant: the persisted client state must never contain
+  // provider credentials or anything matching an Anthropic API key.
+  const json = sanitizeForPersist(next);
   try {
-    // Security invariant: the persisted client state must never contain
-    // provider credentials or anything matching an Anthropic API key.
-    localStorage.setItem(STORAGE_KEY, sanitizeForPersist(next));
+    localStorage.setItem(STORAGE_KEY, json);
   } catch {
     // Storage full or unavailable — keep working in memory.
+  }
+  // Desktop: write-through to the state file (atomic, with daily backups).
+  const desktop = desktopApi();
+  if (desktop) {
+    desktop.writeState(json).catch((e) => {
+      console.error('[store] desktop persist failed:', e);
+    });
   }
   return next;
 }
@@ -178,6 +204,14 @@ export function markSent(prospectId: string): void {
     if (!prospect) return prev;
     const now = nowIso();
     const finalMessage = prospect.editedMessage ?? prospect.originalDraft;
+    const conversationEntry = {
+      id: uid(),
+      prospectId,
+      direction: 'sent' as const,
+      channel: 'linkedin' as const,
+      text: finalMessage,
+      at: now,
+    };
     const activity = logActivity(
       prospectId,
       'marked_sent',
@@ -200,6 +234,7 @@ export function markSent(prospectId: string): void {
           : p,
       ),
       activities: [...prev.activities, activity],
+      conversations: [...(prev.conversations ?? []), conversationEntry],
     };
   });
 }
@@ -356,6 +391,62 @@ export function addEntities(entities: {
 
 export function resetDemoData(): void {
   setState(() => buildDemoState());
+}
+
+/** Append an entry to a prospect's conversation thread. */
+export function logConversation(
+  prospectId: string,
+  direction: 'sent' | 'received',
+  text: string,
+): void {
+  if (text.trim() === '') return;
+  setState((prev) => {
+    const entry = {
+      id: uid(),
+      prospectId,
+      direction,
+      channel: 'linkedin' as const,
+      text,
+      at: nowIso(),
+    };
+    // A received reply also advances the pipeline status when it makes sense.
+    const shouldAdvance =
+      direction === 'received' &&
+      prev.prospects.some(
+        (p) =>
+          p.id === prospectId &&
+          ['connection_sent', 'connection_accepted', 'follow_up_required'].includes(p.status),
+      );
+    return {
+      ...prev,
+      conversations: [...(prev.conversations ?? []), entry],
+      prospects: shouldAdvance
+        ? prev.prospects.map((p) =>
+            p.id === prospectId ? { ...p, status: 'replied', lastActivityAt: entry.at } : p,
+          )
+        : prev.prospects,
+      activities: shouldAdvance
+        ? [
+            ...prev.activities,
+            logActivity(prospectId, 'status_change', 'Reply logged.', null, 'replied'),
+          ]
+        : prev.activities,
+    };
+  });
+}
+
+/** Desktop: record a bridge check result in the CRM state (persisted). */
+export function appendBridgeLog(entry: {
+  at: string;
+  url: string;
+  title: string;
+  snippet: string;
+  ok: boolean;
+}): void {
+  setState((prev) => ({
+    ...prev,
+    bridgeLog: [entry, ...(prev.bridgeLog ?? [])].slice(0, 50),
+  }));
 }
 
 export function replaceState(next: AppState): void {

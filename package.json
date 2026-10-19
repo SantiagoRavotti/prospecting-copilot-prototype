@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Prospecting Copilot — interactive frontend prototype (no external APIs, local storage only)",
+  "description": "Prospecting Copilot — prospecting CRM with embedded assistant (web + desktop)",
+  "main": "electron/main.cjs",
   "scripts": {
+    "desktop": "electron .",
+    "build:desktop": "tsc -b && vite build --base ./",
+    "desktop:dist": "npm run build:desktop && electron-builder --win nsis",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -17,11 +21,39 @@
     "test:e2e": "playwright test",
     "test:rls": "vitest run --config vitest.rls.config.ts"
   },
+  "build": {
+    "appId": "com.santiagoravotti.prospectingcopilot",
+    "productName": "Prospecting Copilot",
+    "files": [
+      "dist/**",
+      "electron/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
+    }
+  },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@hookform/resolvers": "^3.9.0",
     "@sentry/react": "^10.70.0",
     "@supabase/supabase-js": "^2.112.3",
     "@tanstack/react-table": "^8.20.5",
+    "chrome-remote-interface": "^0.34.0",
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
     "react": "^18.3.1",
@@ -39,6 +71,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "electron": "^35.7.5",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.14.0",
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.4.14",

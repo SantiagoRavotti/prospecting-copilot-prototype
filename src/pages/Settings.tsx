@@ -25,6 +25,8 @@ import {
   Textarea,
 } from '../components/ui';
 import { useToast } from '../components/toast';
+import DesktopSettings from '../components/DesktopSettings';
+import { isDesktopMode } from '../lib/desktop';
 
 function listToText(list: string[]): string {
   return list.join('\n');
@@ -92,6 +94,8 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <h1 className="text-xl font-semibold text-slate-900">Settings</h1>
+
+      {isDesktopMode() && <DesktopSettings />}
 
       <Card>
         <CardHeader
