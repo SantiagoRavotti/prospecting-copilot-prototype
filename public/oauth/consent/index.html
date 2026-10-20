@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Autorizar acceso</title>
+<script>
+  // Supabase sends the consent request to <site>/oauth/consent?authorization_id=...
+  // The SPA uses HashRouter, so forward to the hash route keeping the query.
+  location.replace('../../#/oauth/consent' + location.search);
+</script></head><body></body></html>

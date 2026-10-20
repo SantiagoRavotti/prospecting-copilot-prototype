@@ -12,8 +12,9 @@
 // Per-user auth: the only way to obtain a token is to approve the consent page
 // that this app opens, so only the person sitting at this computer can grant
 // ChatGPT access to this CRM. Nothing administrative ships with the installer.
-// The server binds to 127.0.0.1 only; a tunnel (tunnel.cjs) exposes it over
-// HTTPS for the connector handshake.
+// The server binds to 127.0.0.1 only and is started solely by the in-process
+// harness (PC_MCP_SELFTEST). ChatGPT uses the hosted endpoint instead
+// (supabase/functions/crm-mcp); this app never opens an inbound tunnel.
 
 const http = require('node:http');
 const crypto = require('node:crypto');
@@ -27,7 +28,7 @@ const SCOPE = 'crm.read crm.write';
 const ACCESS_TTL_S = 60 * 60 * 24 * 30; // 30 days; revocable from Settings
 
 // --- in-memory auth state (persisted tokens live in authStore below) -------------
-let publicOrigin = null; // e.g. https://xxxx.trycloudflare.com (set when the tunnel is up)
+let publicOrigin = null; // unused outside the harness
 const clients = new Map(); // client_id -> { redirect_uris, client_name }
 const codes = new Map(); // code -> { client_id, redirect_uri, challenge, method, exp }
 let authStore = { tokens: {}, refresh: {} }; // accessToken -> {exp, client}; refreshToken -> {client}

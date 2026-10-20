@@ -23,10 +23,12 @@ contextBridge.exposeInMainWorld('desktop', {
     return () => ipcRenderer.removeListener('crm:refresh', listener);
   },
 
-  mcp: {
-    status: () => ipcRenderer.invoke('mcp:status'),
-    setPublicOrigin: (origin) => ipcRenderer.invoke('mcp:setPublicOrigin', origin),
-    revokeAll: () => ipcRenderer.invoke('mcp:revokeAll'),
+  cloud: {
+    status: () => ipcRenderer.invoke('cloud:status'),
+    sendCode: (email) => ipcRenderer.invoke('cloud:sendCode', email),
+    verifyCode: (email, code) => ipcRenderer.invoke('cloud:verifyCode', email, code),
+    signOut: () => ipcRenderer.invoke('cloud:signOut'),
+    syncNow: () => ipcRenderer.invoke('cloud:syncNow'),
   },
 
   chatgpt: {

@@ -10,6 +10,7 @@ const storeFile = require('./storeFile.cjs');
 const bridge = require('./bridge.cjs');
 const mcpServer = require('./mcpServer.cjs');
 const crmTools = require('./crmTools.cjs');
+const relay = require('./relay.cjs');
 
 let mainWindow = null;
 let chatgptWindow = null;
@@ -58,10 +59,8 @@ function createWindow() {
 }
 
 // ---------------------------------------------------------------------------
-// MCP server for ChatGPT (in-process, loopback only) + persisted token store.
-// The public HTTPS origin is supplied by the user (Settings → "URL pública")
-// after they start a tunnel to the printed local port; nothing here opens
-// ingress on its own.
+// Local MCP server (loopback only) + persisted token store. Used only by the
+// PC_MCP_SELFTEST harness; ChatGPT goes through the hosted endpoint + relay.
 // ---------------------------------------------------------------------------
 
 const MCP_AUTH_FILE = () => path.join(dataDir(), 'mcp-auth.json');
@@ -132,19 +131,18 @@ function writeSetting(key, value) {
   fs.writeFileSync(SETTINGS_FILE(), JSON.stringify(all, null, 2), 'utf8');
 }
 
-ipcMain.handle('mcp:status', () => mcpServer.status());
-ipcMain.handle('mcp:setPublicOrigin', (_e, origin) => {
-  const clean = String(origin || '').trim().replace(/\/+$/, '');
-  if (clean && !/^https:\/\/[a-z0-9.-]+$/i.test(clean)) {
-    throw new Error('La URL pública debe ser https://host (sin ruta).');
-  }
-  writeSetting('mcpPublicOrigin', clean || null);
-  mcpServer.setPublicOrigin(clean || null);
-  return mcpServer.status();
-});
-ipcMain.handle('mcp:revokeAll', () => {
-  mcpServer.revokeAll();
-  return mcpServer.status();
+// Local MCP server: kept for the in-process harness (PC_MCP_SELFTEST) only.
+// ChatGPT reaches the CRM through the HOSTED endpoint (Supabase Edge Function
+// crm-mcp) + the relay below; no tunnel or inbound port is opened by the app.
+
+ipcMain.handle('cloud:status', () => relay.status());
+ipcMain.handle('cloud:sendCode', (_e, email) => relay.sendCode(email));
+ipcMain.handle('cloud:verifyCode', (_e, email, code) => relay.verifyCode(email, code));
+ipcMain.handle('cloud:signOut', () => relay.signOut());
+ipcMain.handle('cloud:syncNow', async () => {
+  await relay.pushSnapshot();
+  await relay.pollInbox();
+  return relay.status();
 });
 ipcMain.handle('store:read', () => storeFile.readStateSync(dataDir()));
 
@@ -176,7 +174,7 @@ function openChatGpt(directive) {
     chatgptWindow.webContents.getUserAgent().replace(/ Electron\/[\d.]+/, '').replace(/ prospecting-copilot-prototype\/[\d.]+/, ''),
   );
   chatgptWindow.webContents.setWindowOpenHandler(({ url: u }) => {
-    if (/^https:\/\/(chatgpt\.com|auth\.openai\.com|auth0\.openai\.com|accounts\.google\.com|login\.microsoftonline\.com|appleid\.apple\.com)/.test(u)) {
+    if (/^https:\/\/(chatgpt\.com|auth\.openai\.com|auth0\.openai\.com|accounts\.google\.com|login\.microsoftonline\.com|appleid\.apple\.com|vqyhxjjirskadwomfjkp\.supabase\.co|santiagoravotti\.github\.io)/.test(u)) {
       return { action: 'allow' };
     }
     shell.openExternal(u);
@@ -204,7 +202,9 @@ ipcMain.handle('store:write', (_e, json) => {
   if (/sk-ant-[A-Za-z0-9_-]+/.test(json)) {
     throw new Error('Refusing to persist state containing an API key pattern');
   }
-  return storeFile.writeState(dataDir(), json);
+  const out = storeFile.writeState(dataDir(), json);
+  relay.schedulePush();
+  return out;
 });
 
 ipcMain.handle('store:backups', () => storeFile.listBackups(dataDir()));
@@ -330,6 +330,7 @@ async function runBridgeSelfTest() {
 
 async function runRendererSmoke() {
   const win = createWindow();
+  relay.init({ dataDir, safeStorage, crmTools, storeFile, appVersion: app.getVersion(), onApplied: notifyCrmChanged });
   win.webContents.on('console-message', (_e, level, message) => {
     if (level >= 2) console.log('RENDERER_CONSOLE ' + message.slice(0, 500));
   });
@@ -363,9 +364,17 @@ async function runRendererSmoke() {
         );
         live = JSON.parse(seen);
       }
+      await win.webContents.executeJavaScript(`location.hash = '#/settings'`);
+      await new Promise((r) => setTimeout(r, 1500));
+      const cloud = JSON.parse(
+        await win.webContents.executeJavaScript(
+          `window.desktop.cloud.status().then((s) => JSON.stringify({ section: Boolean(document.querySelector('[data-testid="cloud-connector-section"]')), connectorUrl: document.querySelector('[data-testid="connector-url"]')?.textContent, connected: s.connected, configured: s.configured, tunnelMentioned: /cloudflared|trycloudflare|túnel/i.test(document.body.innerText) }))`,
+        ),
+      );
+      live.cloud = cloud;
       console.log('SMOKE_RESULT ' + probe + ' LIVE ' + JSON.stringify(live));
       const r = JSON.parse(probe);
-      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) ? 0 : 1);
+      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) && live.cloud.section && !live.cloud.tunnelMentioned ? 0 : 1);
     } catch (e) {
       console.error('SMOKE_ERROR ' + e.message);
       app.exit(1);
@@ -499,7 +508,14 @@ app.whenReady().then(() => {
     return;
   }
   createWindow();
-  startMcp().catch((e) => console.error('[mcp] failed to start:', e.message));
+  relay.init({
+    dataDir,
+    safeStorage,
+    crmTools,
+    storeFile,
+    appVersion: app.getVersion(),
+    onApplied: notifyCrmChanged,
+  });
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });

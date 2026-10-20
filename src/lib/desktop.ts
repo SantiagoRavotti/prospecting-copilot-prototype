@@ -22,24 +22,18 @@ export interface AgentChatResult {
   usage: { input_tokens: number; output_tokens: number; searches: number };
 }
 
-export interface McpAuditEntry {
-  at: string;
-  tool: string;
-  ok: boolean;
-  ms?: number;
-  error?: string;
-  args: string;
-}
-
-export interface McpStatus {
-  running: boolean;
-  port: number | null;
-  publicOrigin: string | null;
-  connectorUrl: string | null;
-  clients: string[];
-  activeTokens: number;
-  sessions: number;
-  audit: McpAuditEntry[];
+export interface CloudRelayStatus {
+  configured: boolean;
+  connected: boolean;
+  email: string | null;
+  connectorUrl: string;
+  encryptionAvailable: boolean;
+  lastPushAt: string | null;
+  lastPollAt: string | null;
+  applied: number;
+  failed: number;
+  lastError: string | null;
+  lastApplied: { at: string; tool: string; result?: unknown; error?: string }[];
 }
 
 export interface DesktopApi {
@@ -49,10 +43,12 @@ export interface DesktopApi {
   readState(): Promise<string | null>;
   listBackups(): Promise<{ file: string; bytes: number }[]>;
   onCrmRefresh(handler: () => void): () => void;
-  mcp: {
-    status(): Promise<McpStatus>;
-    setPublicOrigin(origin: string): Promise<McpStatus>;
-    revokeAll(): Promise<McpStatus>;
+  cloud: {
+    status(): Promise<CloudRelayStatus>;
+    sendCode(email: string): Promise<{ sent: boolean }>;
+    verifyCode(email: string, code: string): Promise<{ email: string | null }>;
+    signOut(): Promise<{ signedOut: boolean }>;
+    syncNow(): Promise<CloudRelayStatus>;
   };
   chatgpt: {
     open(directive?: string): Promise<{ opened: boolean; reused: boolean }>;

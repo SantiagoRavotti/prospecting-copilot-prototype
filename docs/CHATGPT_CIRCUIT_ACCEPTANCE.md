@@ -1,60 +1,92 @@
-# Circuito ChatGPT ↔ CRM — estado y prueba de aceptación (2026-10-20)
+# Circuito ChatGPT ↔ CRM — estado y prueba de aceptación
 
-## Qué está construido
+Actualizado 2026-10-20.
 
-| Pieza | Archivo | Estado |
-| --- | --- | --- |
-| Herramientas del CRM (8) | `electron/crmTools.cjs` | Real. Operan sobre `state.json`; `save_proposals` aplica dedupe (URL normalizada = duplicado duro, nombre+empresa = aviso). |
-| Servidor MCP + OAuth 2.1 | `electron/mcpServer.cjs` | Real. Streamable HTTP en 127.0.0.1:puerto aleatorio; metadata RFC 8414/9728, registro dinámico, PKCE S256, refresh tokens, consentimiento nativo en la app, revocación. Tokens en `mcp-auth.json` (userData), nunca en el instalador. |
-| Ventana ChatGPT en la app | `electron/main.cjs` (`chatgpt:open`) | Real. `chatgpt.com` con sesión persistente (`persist:chatgpt`). "Investigar" abre la conversación con la directiva en `?q=` **y** la copia al portapapeles. |
-| Refresco en vivo | `crm:refresh` → `startCrmRefreshListener` | Real. Verificado por `PC_SMOKE`: una escritura por herramienta aparece en la UI sin recargar. |
-| Página Campañas | `src/pages/Campaigns.tsx` | Real. Crear campaña, directiva → tarea, lista de tareas, fichas con hechos/inferencias/posts, editor, aprobar/descartar; aprobar congela el texto y editar invalida. |
-| Settings → "ChatGPT ↔ CRM" | `src/components/DesktopSettings.tsx` | Real. Puerto, comando de túnel, URL pública, URL del conector, revocar, auditoría de llamadas. |
+## Estado actual, sin adornos
 
-## Qué se verificó automáticamente (sin ChatGPT)
+| Parte | Estado |
+| --- | --- |
+| Herramientas del CRM y creación de fichas | Funcionan con un **cliente simulado** (harness y tests). |
+| Endpoint MCP alojado + OAuth | Código escrito y probado con base de datos simulada. **No desplegado**: Supabase está pausado. |
+| Investigación desde ChatGPT real | **No verificada.** Ninguna llamada de ChatGPT llegó todavía al CRM. |
+| Botón "Investigar" | Crea la tarea, abre ChatGPT en la app con la directiva precargada y la copia al portapapeles. **Eso no completa la investigación por sí solo**: hoy el envío del mensaje y la activación del conector son manuales. |
 
-`PC_MCP_SELFTEST=1 npx electron .` ejecuta contra el servidor real:
-registro → consentimiento → código → token PKCE → `/mcp` sin token = 401 → initialize → tools/list (8) →
-`list_campaigns` → `save_proposals` (1 ficha, approval `pending`, tarea `proposals_received`) →
-mismo candidato otra vez = `skipped_hard_duplicates`. Resultado: `ok: true`.
+En esta primera prueba el envío manual de la directiva es una concesión para verificar el puente. El objetivo
+final sigue siendo operar principalmente desde la app.
 
-`PC_SMOKE=1 npx electron .` ejecuta `save_draft` por la capa de herramientas y comprueba que la ficha
-cambia en pantalla: `LIVE {"fichas":1,"inState":true}`.
+## Por qué no hay túnel
 
-**Lo que NO está verificado todavía**: el handshake con ChatGPT real (requiere tu sesión Plus + Developer
-mode + una URL https pública). Lo demás es simulado por el harness.
+ChatGPT solo acepta conectores en una URL https pública. La primera versión levantaba el servidor MCP dentro
+de la app y necesitaba un túnel efímero para exponerlo. La política de la sesión de Claude Code bloqueó crear ese
+túnel ("external ingress tunnel"): abrir un puerto de la PC a internet. Pedirte que lo ejecutaras a mano sería
+eludir ese bloqueo, así que esa vía quedó descartada y retirada de la app y de Settings.
 
-## Por qué hace falta un túnel
+## Vía elegida: endpoint alojado en Supabase (UE)
 
-ChatGPT exige que un conector MCP esté en una URL https pública; no acepta `localhost`. El servidor vive
-en la app; el túnel solo reenvía ese puerto durante la prueba. Pedí al asistente que lo lanzara desde la app
-y la política de la sesión lo bloqueó ("external ingress tunnel"), así que el paso queda manual: un comando.
-Alternativa durable dentro de tus requisitos: alojar el endpoint MCP en Supabase (Edge Function) cuando
-restaures el proyecto; las herramientas ya están separadas del transporte.
+```
+ChatGPT ──OAuth 2.1──► Supabase Auth (servidor OAuth, issuer /auth/v1)
+   │                         │ consentimiento: página /oauth/consent de la web (login con código por email)
+   └──MCP (HTTPS)──► Edge Function crm-mcp ──RLS como el usuario──► crm_snapshots (lectura)
+                                                                  └► crm_inbox (escrituras de ChatGPT)
+App de escritorio (sesión del mismo usuario) ── publica snapshot / aplica inbox ──► state.json ──► fichas en pantalla
+```
 
-## Prueba de aceptación — pasos manuales agrupados
+- **Sin puertos entrantes en tu PC.** La app solo hace llamadas salientes a Supabase.
+- **Sin claves administrativas** en la app, el instalador ni la función. La función usa el token OAuth del usuario
+  y la clave pública; RLS aísla cada fila por usuario.
+- **La app sigue siendo la fuente de verdad local.** Supabase solo transporta el snapshot de lectura y la cola de
+  escrituras, que además queda como registro de lo que escribió ChatGPT.
+- **App cerrada**: la escritura queda en cola y ChatGPT recibe "queued"; se aplica una sola vez al abrir la app.
+- Archivos: `supabase/functions/crm-mcp/`, `supabase/migrations/0003_mcp_relay.sql`, `electron/relay.cjs`,
+  `electron/relaySnapshot.cjs`, `src/pages/OAuthConsent.tsx`, `public/oauth/consent/index.html`,
+  `supabase/templates/magic_link.html`.
 
-Instalador: `release/Prospecting Copilot Setup 0.1.0.exe` (o `npm run desktop` desde el repo).
+**Riesgo abierto:** la documentación de OpenAI no aclara cómo descubre ChatGPT un servidor de autorización con
+ruta. El servidor OAuth de Supabase publica su metadata en la raíz del dominio, y la función además responde las
+variantes de descubrimiento bajo su propia ruta. Se confirma solo con la prueba real.
 
-1. Abrí la app → **Settings** → sección "ChatGPT ↔ CRM". Copiá el comando del túnel y ejecutalo en una
-   terminal (`cloudflared` está en `node_modules/cloudflared/bin/cloudflared.exe`; también sirve el binario
-   oficial). Pegá el origen `https://….trycloudflare.com` en "URL pública" → Guardar. Aparece la URL del conector.
-2. **Campañas** → crear campaña (ej. "E-commerce España", objetivo 3) → escribir directiva → **Investigar**.
-   Se abre la ventana ChatGPT dentro de la app. Iniciá sesión (una vez; queda persistida).
-3. En ChatGPT: Settings → Connectors → Advanced → Developer mode → Create → pegar la URL del conector.
-   ChatGPT abre la autorización; la app muestra "Permitir / Denegar". Permitir.
-4. Volvé a la conversación. Si el prefill `?q=` no cargó la directiva, pegala (ya está en el portapapeles;
-   botón "Copiar última directiva"). Activá el conector en la conversación.
-5. ChatGPT llama `get_research_task` → `list_contacted_people` → `save_proposals`. Las fichas aparecen en
-   Campañas sin recargar; Settings muestra las llamadas en la auditoría.
-6. Revisar: editar mensaje (invalida aprobación si ya estaba aprobada), **Aprobar** (congela texto),
-   Descartar. Cerrá y reabrí la app: todo persiste en `state.json`.
+## Verificado automáticamente
 
-Si falla, anotá en qué paso: (1) túnel/URL, (3) registro/consentimiento, (4) la directiva no llegó,
-(5) ChatGPT no llamó herramientas. Cada uno tiene un remedio distinto y ninguno requiere API de pago.
+| Prueba | Qué cubre |
+| --- | --- |
+| `src/lib/crmMcpCore.test.ts` (5) | 401 con desafío OAuth descubrible; initialize; 8 herramientas; criterios → contactos → 3 candidatos guardados como fichas reales pendientes; dedupe; app cerrada = en cola y aplicada una sola vez; escrituras inválidas nunca entran a la cola. |
+| `PC_SMOKE=1` | Settings muestra el conector alojado y ningún paso de túnel. |
+| `PC_MCP_SELFTEST=1` | El servidor local de la versión anterior sigue pasando (solo harness). |
 
-## Fuera de este hito (pendiente, sin cambios)
+## Pasos
 
-- LinkedIn solo lectura + dry-run (3 perfiles) con Claude y Chrome visible: cuenta de Claude pendiente, Team no autorizada.
+### Tuyos, antes de que yo despliegue
+
+1. supabase.com → proyecto "Prospecting Copilot" → **Restore project**.
+2. En una terminal del repo, `npx supabase login`. Abre el navegador; no hay que pegar nada en el chat.
+
+### Míos, en cuanto estén hechos
+
+1. Vincular el proyecto, revisar el historial de migraciones y aplicar `0003_mcp_relay.sql`.
+2. Auth: activar el servidor OAuth 2.1 con registro dinámico, ruta de autorización hacia la página de
+   consentimiento y plantilla de email con código de 6 dígitos.
+3. Secreto público `PC_PUBLISHABLE_KEY` y despliegue de `crm-mcp` sin verificación JWT del gateway.
+4. Comprobar el 401, la metadata del recurso, el descubrimiento del servidor OAuth y la redirección al consentimiento.
+5. Publicar la web en Pages (página de consentimiento) y generar el instalador.
+
+### Tuyos, la prueba con tres candidatos
+
+1. Instalar la versión nueva. Settings → "ChatGPT ↔ CRM (conector alojado)" → email → código → Verificar.
+2. Campañas → crear "E-commerce España" con objetivo 3 → escribir la directiva → Investigar.
+3. En la ventana ChatGPT de la app: Settings → Apps & Connectors → Advanced → Developer mode → Create.
+   URL: la que muestra Settings. Autenticación: OAuth. Se abre el consentimiento: email → código → Permitir.
+4. En la conversación, activar el conector y enviar la directiva (manual en esta prueba).
+5. Esperado: ChatGPT llama `get_research_task` y `list_contacted_people`, investiga y llama `save_proposals`.
+   Las 3 fichas aparecen en Campañas sin recargar, pendientes de aprobación.
+6. Revisar, editar y aprobar o descartar. Cerrar y reabrir la app: todo persiste.
+
+El SMTP incluido en Supabase envía pocos emails por hora. La prueba usa dos códigos: uno para la app y otro para
+el consentimiento.
+
+Si falla, anotá el paso: (3) descubrimiento OAuth o consentimiento, (4) ChatGPT no llama herramientas,
+(5) las fichas no aparecen. Cada uno tiene un remedio distinto y ninguno requiere API de pago ni otro chatbot.
+
+## Fuera de este hito
+
+- LinkedIn en solo lectura y dry-run con Claude y Chrome visible: la cuenta de Claude está pendiente y la Team no está autorizada.
 - Programación con la computadora apagada: requisito abierto.
-- Supabase: proyecto pausado, token rotado; restaurar con `npx supabase login` cuando decidas.
