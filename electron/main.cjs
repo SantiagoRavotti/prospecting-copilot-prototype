@@ -402,6 +402,12 @@ async function runUrlProbe(url) {
  */
 async function runMcpSelfTest() {
   const dir = dataDir();
+  // The harness writes through the real tools; restore the user's state afterwards.
+  const snapshot = storeFile.readStateSync(dir);
+  const restore = () => {
+    if (snapshot) storeFile.writeState(dir, snapshot);
+  };
+  const runId = Date.now().toString(36);
   try {
     const port = await startMcp();
     const base = `http://127.0.0.1:${port}`;
@@ -439,8 +445,8 @@ async function runMcpSelfTest() {
     state.researchTasks = [...(state.researchTasks || []), task];
     storeFile.writeState(dir, JSON.stringify(state));
     const before = state.prospects.length;
-    const save = parseSse((await j('/mcp', { method: 'POST', headers: h2, body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'save_proposals', arguments: { task_id: task.id, candidates: [{ full_name: 'Selftest Persona', title: 'CEO', company: 'Selftest SA', linkedin_url: 'https://www.linkedin.com/in/selftest-persona/', why_fit: 'harness', draft_message: 'Hola, mensaje de prueba del harness.', activity_checked: false, verified_facts: [], inferences: ['simulated'] }] } } }) })).body)[0];
-    const saveAgain = parseSse((await j('/mcp', { method: 'POST', headers: h2, body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'save_proposals', arguments: { task_id: task.id, candidates: [{ full_name: 'Selftest Persona', title: 'CEO', company: 'Selftest SA', linkedin_url: 'https://linkedin.com/in/selftest-persona', why_fit: 'dup', draft_message: 'dup' }] } } }) })).body)[0];
+    const save = parseSse((await j('/mcp', { method: 'POST', headers: h2, body: JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'save_proposals', arguments: { task_id: task.id, candidates: [{ full_name: 'Selftest Persona', title: 'CEO', company: 'Selftest SA', linkedin_url: `https://www.linkedin.com/in/selftest-${runId}/`, why_fit: 'harness', draft_message: 'Hola, mensaje de prueba del harness.', activity_checked: false, verified_facts: [], inferences: ['simulated'] }] } } }) })).body)[0];
+    const saveAgain = parseSse((await j('/mcp', { method: 'POST', headers: h2, body: JSON.stringify({ jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'save_proposals', arguments: { task_id: task.id, candidates: [{ full_name: 'Selftest Persona', title: 'CEO', company: 'Selftest SA', linkedin_url: `https://linkedin.com/in/selftest-${runId}`, why_fit: 'dup', draft_message: 'dup' }] } } }) })).body)[0];
     const after = JSON.parse(storeFile.readStateSync(dir));
     const created = after.prospects.length - before;
     const ficha = after.prospects[after.prospects.length - 1];
@@ -463,9 +469,11 @@ async function runMcpSelfTest() {
     const ok = result.metadataOk && result.registered && result.consentRedirectHasCode && result.tokenIssued && result.unauthenticatedRejected && result.toolCount === 8 && created === 1 && result.duplicateSkipped.length === 1 && result.fichaApproval === 'pending' && result.taskStatus === 'proposals_received';
     console.log('MCP_SELFTEST_RESULT ' + JSON.stringify({ ok, ...result }));
     mcpServer.stop();
+    restore();
     app.exit(ok ? 0 : 1);
   } catch (e) {
     console.error('MCP_SELFTEST_ERROR ' + (e.stack || e.message));
+    restore();
     app.exit(1);
   }
 }
