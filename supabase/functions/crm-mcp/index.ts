@@ -68,11 +68,11 @@ Deno.serve((req) =>
       return data as { status: 'pending' | 'applied' | 'failed'; result: unknown } | null;
     },
     async authServerMetadata() {
-      if (!asMetadataCache) {
-        const r = await fetch(`${SUPABASE_URL}/.well-known/oauth-authorization-server/auth/v1`);
-        asMetadataCache = await r.json();
-      }
-      return asMetadataCache;
+      if (asMetadataCache) return asMetadataCache;
+      const r = await fetch(`${SUPABASE_URL}/.well-known/oauth-authorization-server/auth/v1`);
+      const body = await r.json();
+      if (r.ok) asMetadataCache = body; // never cache an error (e.g. OAuth server still disabled)
+      return body;
     },
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   }),

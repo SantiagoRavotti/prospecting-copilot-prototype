@@ -306,7 +306,7 @@ function CloudConnectorSection() {
         {!status?.connected && (
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-56 flex-1">
-              <Field label="Email de tu cuenta" hint="Te llega un código de 6 dígitos. Sin contraseña.">
+              <Field label="Email de tu cuenta" hint="Te llega un código por email. Sin contraseña.">
                 <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="cloud-email" />
               </Field>
             </div>

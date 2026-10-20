@@ -64,14 +64,14 @@ variantes de descubrimiento bajo su propia ruta. Se confirma solo con la prueba 
 
 1. Vincular el proyecto, revisar el historial de migraciones y aplicar `0003_mcp_relay.sql`.
 2. Auth: activar el servidor OAuth 2.1 con registro dinámico, ruta de autorización hacia la página de
-   consentimiento y plantilla de email con código de 6 dígitos.
+   consentimiento y plantilla de email con código.
 3. Secreto público `PC_PUBLISHABLE_KEY` y despliegue de `crm-mcp` sin verificación JWT del gateway.
 4. Comprobar el 401, la metadata del recurso, el descubrimiento del servidor OAuth y la redirección al consentimiento.
 5. Publicar la web en Pages (página de consentimiento) y generar el instalador.
 
 ### Tuyos, la prueba con tres candidatos
 
-1. Instalar la versión nueva. Settings → "ChatGPT ↔ CRM (conector alojado)" → email → código → Verificar.
+1. Instalar la versión nueva. Settings → "ChatGPT ↔ CRM (conector alojado)" → email → código (8 dígitos) → Verificar.
 2. Campañas → crear "E-commerce España" con objetivo 3 → escribir la directiva → Investigar.
 3. En la ventana ChatGPT de la app: Settings → Apps & Connectors → Advanced → Developer mode → Create.
    URL: la que muestra Settings. Autenticación: OAuth. Se abre el consentimiento: email → código → Permitir.

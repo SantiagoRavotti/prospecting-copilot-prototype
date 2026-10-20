@@ -92,7 +92,7 @@ export default function OAuthConsent() {
   if (!session) {
     return shell(
       <div className="space-y-3">
-        <p className="text-sm text-slate-600">Iniciá sesión con tu email. Te enviamos un código de 6 dígitos.</p>
+        <p className="text-sm text-slate-600">Iniciá sesión con tu email. Te enviamos un código por email.</p>
         <Input type="email" placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="consent-email" />
         {codeSent && (
           <Input inputMode="numeric" placeholder="Código" value={code} onChange={(e) => setCode(e.target.value)} data-testid="consent-code" />
