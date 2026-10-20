@@ -125,12 +125,33 @@ async function sendCode(email) {
   if (error) throw new Error(error.message);
   return { sent: true };
 }
-async function verifyCode(email, code) {
-  const { data, error } = await client.auth.verifyOtp({
-    email: String(email).trim(),
-    token: String(code).trim(),
-    type: 'email',
-  });
+/** Code from the email, or the sign-in link pasted as text (see src/lib/emailCredential.ts). */
+function parseEmailCredential(input) {
+  const raw = String(input || '').trim();
+  if (/^\d{6,10}$/.test(raw)) return { kind: 'code', code: raw };
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const token = url.searchParams.get('token') || url.searchParams.get('token_hash');
+      if (!token) return { kind: 'invalid', reason: 'El enlace no contiene un token de acceso.' };
+      if (token.startsWith('pkce_')) {
+        return { kind: 'invalid', reason: 'Ese enlace solo funciona en el navegador donde lo pediste.' };
+      }
+      return { kind: 'link', tokenHash: token, type: url.searchParams.get('type') || 'magiclink' };
+    } catch {
+      return { kind: 'invalid', reason: 'No parece un enlace válido.' };
+    }
+  }
+  return { kind: 'invalid', reason: 'Pegá el código del email o el enlace completo.' };
+}
+
+async function verifyCode(email, input) {
+  const cred = parseEmailCredential(input);
+  if (cred.kind === 'invalid') throw new Error(cred.reason);
+  const { data, error } =
+    cred.kind === 'code'
+      ? await client.auth.verifyOtp({ email: String(email).trim(), token: cred.code, type: 'email' })
+      : await client.auth.verifyOtp({ token_hash: cred.tokenHash, type: cred.type });
   if (error) throw new Error(error.message);
   return { email: data.user && data.user.email };
 }
@@ -244,4 +265,4 @@ async function status() {
   };
 }
 
-module.exports = { init, sendCode, verifyCode, signOut, schedulePush, pushSnapshot, pollInbox, status, applyRow };
+module.exports = { init, sendCode, verifyCode, parseEmailCredential, signOut, schedulePush, pushSnapshot, pollInbox, status, applyRow };

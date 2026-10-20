@@ -1,0 +1,10 @@
+project_id = "prospecting-copilot-prototype"
+
+# REVERT of the 2026-10-21 Auth change. Push from this folder:
+#   npx supabase config push --project-ref vqyhxjjirskadwomfjkp
+[auth.oauth_server]
+enabled = false
+
+[auth.email.template.magic_link]
+subject = "Your sign-in link"
+content_path = "./supabase/templates/magic_link_default.html"

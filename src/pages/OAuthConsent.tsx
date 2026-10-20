@@ -10,7 +10,21 @@
 import { useEffect, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { ShieldCheck } from 'lucide-react';
-import { supabase } from '../lib/supabaseClient';
+import { createClient } from '@supabase/supabase-js';
+import { parseEmailCredential } from '../lib/emailCredential';
+
+// Own client in IMPLICIT flow: the sign-in email's link then carries a plain
+// token hash, so it can be pasted here (e.g. inside the app's ChatGPT window,
+// where clicking it would open another browser). Separate storage key: it
+// never touches the main app's session.
+const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const supabase =
+  url && key
+    ? createClient(url, key, {
+        auth: { flowType: 'implicit', storageKey: 'pc-oauth-consent', persistSession: true, detectSessionInUrl: false },
+      })
+    : null;
 import { Button, Card, Input, Spinner } from '../components/ui';
 
 interface Details {
@@ -92,10 +106,10 @@ export default function OAuthConsent() {
   if (!session) {
     return shell(
       <div className="space-y-3">
-        <p className="text-sm text-slate-600">Iniciá sesión con tu email. Te enviamos un código por email.</p>
+        <p className="text-sm text-slate-600">Iniciá sesión con tu email. Te llega un email con un código o un enlace: pegá cualquiera de los dos acá (el enlace: clic derecho → copiar dirección).</p>
         <Input type="email" placeholder="tu@email.com" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="consent-email" />
         {codeSent && (
-          <Input inputMode="numeric" placeholder="Código" value={code} onChange={(e) => setCode(e.target.value)} data-testid="consent-code" />
+          <Input placeholder="Código o enlace del email" value={code} onChange={(e) => setCode(e.target.value)} data-testid="consent-code" />
         )}
         {error && <p className="text-xs text-rose-600">{error}</p>}
         {!codeSent ? (
@@ -121,7 +135,12 @@ export default function OAuthConsent() {
             disabled={code.trim().length < 6}
             onClick={() =>
               run(async () => {
-                const { error: err } = await supabase!.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
+                const cred = parseEmailCredential(code);
+                if (cred.kind === 'invalid') throw new Error(cred.reason);
+                const { error: err } =
+                  cred.kind === 'code'
+                    ? await supabase!.auth.verifyOtp({ email: email.trim(), token: cred.code, type: 'email' })
+                    : await supabase!.auth.verifyOtp({ token_hash: cred.tokenHash, type: cred.type });
                 if (err) throw err;
               })
             }

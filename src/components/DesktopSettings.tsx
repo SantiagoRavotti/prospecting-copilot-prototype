@@ -327,9 +327,9 @@ function CloudConnectorSection() {
               </Button>
             ) : (
               <>
-                <div className="w-36">
-                  <Field label="Código">
-                    <Input inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value)} data-testid="cloud-code" />
+                <div className="min-w-64 flex-1">
+                  <Field label="Código o enlace del email" hint="Si el email trae solo un enlace: clic derecho → copiar dirección del enlace, y pegalo acá. No lo abras.">
+                    <Input value={code} onChange={(e) => setCode(e.target.value)} data-testid="cloud-code" />
                   </Field>
                 </div>
                 <Button

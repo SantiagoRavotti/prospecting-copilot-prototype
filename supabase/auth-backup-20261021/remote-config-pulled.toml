@@ -1,0 +1,21 @@
+project_id = "prospecting-copilot-prototype"
+
+[auth]
+additional_redirect_urls = ["https://santiagoravotti.github.io/prospecting-copilot-prototype/", "http://localhost:5173/"]
+site_url = "https://santiagoravotti.github.io/prospecting-copilot-prototype/"
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[db.pooler]
+default_pool_size = 15
+max_client_conn = 200
+
+[storage.vector]
+enabled = false
