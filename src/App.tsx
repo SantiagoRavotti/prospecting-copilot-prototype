@@ -5,6 +5,7 @@ import {
   Building2,
   CalendarClock,
   Calculator,
+  FolderKanban,
   Kanban,
   Landmark,
   LayoutDashboard,
@@ -25,6 +26,7 @@ import FollowUps from './pages/FollowUps';
 import Pipeline from './pages/Pipeline';
 import Opportunities from './pages/Opportunities';
 import Assistant from './pages/Assistant';
+import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
 import { isDesktopMode } from './lib/desktop';
 import Settings from './pages/Settings';
@@ -33,7 +35,12 @@ import CostEstimator from './pages/CostEstimator';
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/today', label: "Today's Prospects", icon: Sparkles },
-  ...(isDesktopMode() ? [{ to: '/assistant', label: 'Asistente', icon: Bot }] : []),
+  ...(isDesktopMode()
+    ? [
+        { to: '/campaigns', label: 'Campañas', icon: FolderKanban },
+        { to: '/assistant', label: 'Asistente', icon: Bot },
+      ]
+    : []),
   { to: '/companies', label: 'Companies', icon: Building2 },
   { to: '/people', label: 'People', icon: Users },
   { to: '/follow-ups', label: 'Follow-ups', icon: CalendarClock },
@@ -167,6 +174,7 @@ export default function App() {
           <Route path="/follow-ups" element={<FollowUps />} />
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/opportunities" element={<Opportunities />} />
+          <Route path="/campaigns" element={<Campaigns />} />
           <Route path="/assistant" element={<Assistant />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cost-estimator" element={<CostEstimator />} />

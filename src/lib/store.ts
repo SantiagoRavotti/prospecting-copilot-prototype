@@ -20,6 +20,7 @@ import { desktopApi } from './desktop';
 import { isCloudMode } from './supabaseClient';
 import { emptyCloudState } from './sync/mappers';
 import { sanitizeForPersist } from './secretsGuard';
+import { invalidateApprovalIfChanged } from './campaigns';
 import { nowIso, uid } from './utils';
 
 export const STORAGE_KEY = 'prospecting-copilot-state-v1';
@@ -281,12 +282,12 @@ export function saveMessage(prospectId: string, message: string): void {
       ...prev,
       prospects: prev.prospects.map((p) =>
         p.id === prospectId
-          ? {
+          ? invalidateApprovalIfChanged({
               ...p,
               editedMessage: isReset ? null : message,
               editedAt: isReset ? null : now,
               lastActivityAt: now,
-            }
+            })
           : p,
       ),
       activities: [...prev.activities, activity],
@@ -451,6 +452,26 @@ export function appendBridgeLog(entry: {
 
 export function replaceState(next: AppState): void {
   setState(() => migrateState(next));
+}
+
+/**
+ * Desktop: the in-app MCP server (ChatGPT's connector) writes fichas straight
+ * into the state file. When it does, reload the file so they appear live.
+ */
+export function startCrmRefreshListener(): () => void {
+  const desktop = desktopApi();
+  if (!desktop?.onCrmRefresh) return () => {};
+  return desktop.onCrmRefresh(() => {
+    void desktop.readState().then((raw) => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as AppState;
+        if (parsed && Array.isArray(parsed.prospects)) replaceState(parsed);
+      } catch (e) {
+        console.error('[store] crm refresh failed:', e);
+      }
+    });
+  });
 }
 
 /** Validate a parsed backup before importing it (v1 backups are migrated). */

@@ -64,6 +64,8 @@ export interface Workspace {
   preferredMessageLength: MessageLength;
   dailyTarget: number;
   targetingRules: TargetingRules;
+  /** The LinkedIn account that sends for this workspace (queue/caps shared). */
+  senderAccountId?: string;
 }
 
 export interface Company {
@@ -134,6 +136,10 @@ export interface Prospect {
   lastActivityAt: string;
   outcome: string | null;
   isDemo: boolean;
+  /** Campaign this prospect belongs to (campaign-driven flow). */
+  campaignId?: string;
+  approval?: ProspectApproval;
+  research?: ProspectResearch;
 }
 
 export type ActivityType =
@@ -171,6 +177,160 @@ export interface FollowUp {
 
 import type { Opportunity, OpportunityAlert, OpportunitySource } from './opportunityTypes';
 
+// ---------------------------------------------------------------------------
+// Campaigns, research tasks, approval and execution batches
+// ---------------------------------------------------------------------------
+
+export type CampaignStatus = 'draft' | 'active' | 'paused' | 'done';
+
+export interface Campaign {
+  id: string;
+  workspaceId: string;
+  name: string;
+  objective: string;
+  audience: string;
+  searchCriteria: string;
+  language: Language;
+  tone: Tone;
+  targetCount: number;
+  exclusions: string[];
+  messageGuidelines: string;
+  schedule: { prepDate?: string; executeDate?: string; dailyCap: number };
+  status: CampaignStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ResearchTaskStatus =
+  | 'pending' // created in the app, waiting for a collector
+  | 'collecting' // Claude + authenticated browser gathering accessible facts
+  | 'ready_for_analysis' // collected data saved; ChatGPT can analyse & draft
+  | 'proposals_received' // ChatGPT wrote candidate fichas via MCP
+  | 'done';
+
+export interface CollectedPost {
+  url: string;
+  date?: string;
+  title?: string;
+  excerpt?: string;
+  source: 'linkedin' | 'web';
+}
+
+export interface CollectedProfile {
+  profileUrl: string;
+  fullName?: string;
+  headline?: string;
+  company?: string;
+  photoUrl?: string;
+  posts: CollectedPost[];
+  /** true only if the collector actually opened the activity page */
+  activityChecked: boolean;
+  accessNotes: string[];
+  collectedAt: string;
+  collector: 'claude' | 'mock';
+}
+
+export interface ResearchTask {
+  id: string;
+  campaignId: string;
+  directive: string;
+  status: ResearchTaskStatus;
+  seedProfileUrls: string[];
+  collected: CollectedProfile[];
+  createdAt: string;
+  updatedAt: string;
+  log: { at: string; event: string }[];
+}
+
+export type ApprovalStatus = 'pending' | 'approved' | 'discarded';
+
+export interface ProspectApproval {
+  status: ApprovalStatus;
+  /** Exact approved text; any later edit invalidates the approval. */
+  approvedText: string | null;
+  approvedAt: string | null;
+}
+
+export interface ProspectResearch {
+  verifiedFacts: string[];
+  inferences: string[];
+  posts: CollectedPost[];
+  activityChecked: boolean;
+  suggestedOpener: string;
+  photoUrl?: string;
+  sources: string[];
+}
+
+export type RecipientResultStatus =
+  | 'sent'
+  | 'already_connected'
+  | 'pending_invitation'
+  | 'skipped'
+  | 'error'
+  | 'uncertain';
+
+export interface BatchRecipient {
+  prospectId: string;
+  personName: string;
+  profileUrl: string;
+  /** Frozen copy of the approved message — the executor never rewrites it. */
+  frozenMessage: string;
+  result?: {
+    status: RecipientResultStatus;
+    detail: string;
+    at: string;
+    verifiedBeforeAction: boolean;
+    /** false for uncertain/error: may still be resolved by a later verification */
+    resolved: boolean;
+  };
+}
+
+export type BatchStatus = 'frozen' | 'running' | 'paused' | 'completed' | 'failed';
+
+export interface Batch {
+  id: string;
+  campaignId: string;
+  workspaceId: string;
+  /** Queue and daily caps are shared by every campaign of this sender account. */
+  senderAccountId: string;
+  mode: 'dry_run' | 'live';
+  status: BatchStatus;
+  recipients: BatchRecipient[];
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  summary?: { completed: number; skipped: number; pending: number; errors: number };
+}
+
+/**
+ * Per-action event history. Each event has a unique id (idempotency key):
+ * the same event is never processed twice. `verification` events can resolve
+ * an earlier uncertain/error result; a confirmed `sent` is final forever.
+ */
+export interface BatchEvent {
+  id: string;
+  batchId: string;
+  prospectId: string;
+  senderAccountId: string;
+  mode: 'dry_run' | 'live';
+  kind: 'verify' | 'action' | 'result' | 'verification';
+  status: RecipientResultStatus;
+  detail: string;
+  at: string;
+  source: 'mock' | 'claude' | 'user';
+  verifiedBeforeAction?: boolean;
+}
+
+export interface ChannelLimitConfig {
+  channel: 'linkedin_invite';
+  /** Provisional target until the real form is observed. */
+  configuredLimit: number;
+  margin: number;
+  /** maxlength actually observed on the LinkedIn note field (by the executor). */
+  observedLimit: number | null;
+  observedAt: string | null;
+}
+
 export interface ConversationEntry {
   id: string;
   prospectId: string;
@@ -204,4 +364,11 @@ export interface AppState {
   bridgeLog?: BridgeLogEntry[];
   /** Per-prospect message threads (sent auto-logged; replies pasted by the user). */
   conversations?: ConversationEntry[];
+  campaigns?: Campaign[];
+  researchTasks?: ResearchTask[];
+  batches?: Batch[];
+  batchEvents?: BatchEvent[];
+  /** Single execution queue per sender account: at most one running batch each. */
+  executionLocks?: Record<string, { batchId: string; startedAt: string }>;
+  channelLimits?: { linkedin_invite: ChannelLimitConfig };
 }

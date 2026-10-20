@@ -14,7 +14,25 @@ contextBridge.exposeInMainWorld('desktop', {
   /** Raw JSON of the persisted state, read at boot (null on first run). */
   initialState,
   writeState: (json) => ipcRenderer.invoke('store:write', json),
+  readState: () => ipcRenderer.invoke('store:read'),
   listBackups: () => ipcRenderer.invoke('store:backups'),
+  /** Fired when an external writer (the MCP server) changed the state file. */
+  onCrmRefresh: (handler) => {
+    const listener = () => handler();
+    ipcRenderer.on('crm:refresh', listener);
+    return () => ipcRenderer.removeListener('crm:refresh', listener);
+  },
+
+  mcp: {
+    status: () => ipcRenderer.invoke('mcp:status'),
+    setPublicOrigin: (origin) => ipcRenderer.invoke('mcp:setPublicOrigin', origin),
+    revokeAll: () => ipcRenderer.invoke('mcp:revokeAll'),
+  },
+
+  chatgpt: {
+    open: (directive) => ipcRenderer.invoke('chatgpt:open', directive),
+    status: () => ipcRenderer.invoke('chatgpt:status'),
+  },
 
   bridge: {
     status: () => ipcRenderer.invoke('bridge:status'),

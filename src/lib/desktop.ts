@@ -22,11 +22,42 @@ export interface AgentChatResult {
   usage: { input_tokens: number; output_tokens: number; searches: number };
 }
 
+export interface McpAuditEntry {
+  at: string;
+  tool: string;
+  ok: boolean;
+  ms?: number;
+  error?: string;
+  args: string;
+}
+
+export interface McpStatus {
+  running: boolean;
+  port: number | null;
+  publicOrigin: string | null;
+  connectorUrl: string | null;
+  clients: string[];
+  activeTokens: number;
+  sessions: number;
+  audit: McpAuditEntry[];
+}
+
 export interface DesktopApi {
   isDesktop: true;
   initialState: string | null;
   writeState(json: string): Promise<{ bytes: number; path: string }>;
+  readState(): Promise<string | null>;
   listBackups(): Promise<{ file: string; bytes: number }[]>;
+  onCrmRefresh(handler: () => void): () => void;
+  mcp: {
+    status(): Promise<McpStatus>;
+    setPublicOrigin(origin: string): Promise<McpStatus>;
+    revokeAll(): Promise<McpStatus>;
+  };
+  chatgpt: {
+    open(directive?: string): Promise<{ opened: boolean; reused: boolean }>;
+    status(): Promise<{ open: boolean }>;
+  };
   bridge: {
     status(): Promise<{ running: boolean; port: number | null }>;
     launch(startUrl?: string): Promise<{ alreadyRunning: boolean; port: number }>;
