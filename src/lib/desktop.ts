@@ -9,17 +9,26 @@ export interface BridgeSelfTestResult {
   readAt: string;
 }
 
-export interface AgentProposal {
-  entity: 'prospect' | 'opportunity' | 'follow_up' | 'company' | 'person';
-  id?: string;
-  patch: Record<string, unknown>;
-  reason: string;
+export interface ChatGptViewState {
+  created: boolean;
+  attached: boolean;
+  url: string | null;
+  conversationId: string | null;
+  loggedIn?: boolean;
 }
 
-export interface AgentChatResult {
-  text: string;
-  proposals: AgentProposal[];
-  usage: { input_tokens: number; output_tokens: number; searches: number };
+export interface DirectiveDelivery extends ChatGptViewState {
+  delivered: boolean;
+  /** session | composer | insert | confirm | confirmed | dry_run */
+  stage: string;
+  reason?: string;
+}
+
+export interface ViewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface CloudRelayStatus {
@@ -51,8 +60,13 @@ export interface DesktopApi {
     syncNow(): Promise<CloudRelayStatus>;
   };
   chatgpt: {
-    open(directive?: string): Promise<{ opened: boolean; reused: boolean }>;
-    status(): Promise<{ open: boolean }>;
+    show(bounds: ViewBounds): Promise<ChatGptViewState>;
+    setBounds(bounds: ViewBounds): Promise<void>;
+    hide(): Promise<void>;
+    open(url?: string): Promise<ChatGptViewState>;
+    status(): Promise<ChatGptViewState>;
+    sendDirective(text: string, conversationUrl?: string): Promise<DirectiveDelivery>;
+    onNavigated(handler: (nav: { url: string; conversationId: string | null }) => void): () => void;
   };
   bridge: {
     status(): Promise<{ running: boolean; port: number | null }>;
@@ -62,19 +76,11 @@ export interface DesktopApi {
     stop(): Promise<{ stopped: boolean }>;
     selfTest(): Promise<BridgeSelfTestResult>;
   };
-  secrets: {
-    setAnthropicKey(key: string): Promise<{ stored: boolean; last4: string }>;
-    anthropicKeyStatus(): Promise<{ stored: boolean; last4: string | null }>;
-    clearAnthropicKey(): Promise<{ stored: boolean }>;
+  legacyKey: {
+    status(): Promise<{ stored: boolean }>;
+    delete(): Promise<{ stored: boolean }>;
   };
-  agent: {
-    chat(payload: {
-      messages: { role: 'user' | 'assistant'; content: string }[];
-      crmSnapshot: unknown;
-      campaignContext: string;
-    }): Promise<AgentChatResult>;
-    onEvent(handler: (ev: { type: string; text?: string; name?: string }) => void): () => void;
-  };
+
 }
 
 export function desktopApi(): DesktopApi | null {

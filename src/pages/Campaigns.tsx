@@ -4,9 +4,8 @@
 // the in-app MCP connector: facts vs inferences, posts, editable message,
 // approve / discard. Approval freezes the exact text; any edit invalidates it.
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Bot,
   Check,
   ClipboardCopy,
   ExternalLink,
@@ -15,8 +14,10 @@ import {
   ThumbsDown,
   Undo2,
 } from 'lucide-react';
-import { desktopApi } from '../lib/desktop';
-import { activeWorkspace, companyById, personById, useAppState } from '../lib/store';
+import { desktopApi, type DirectiveDelivery } from '../lib/desktop';
+import { currentScope, linkFor, logTaskEvent, saveConversationLink, setActiveCampaign } from '../lib/chatgptLinks';
+import { isDockOpen, setDockOpen } from '../lib/dockStore';
+import { activeWorkspace, companyById, getState, personById, useAppState } from '../lib/store';
 import {
   approve,
   createCampaign,
@@ -70,18 +71,43 @@ export default function Campaigns() {
     toast('Campaña creada.', 'success');
   };
 
+  // The selected campaign scopes the ChatGPT conversation shown in the dock.
+  useEffect(() => {
+    setActiveCampaign(selected?.id ?? null);
+  }, [selected?.id]);
+
+  const [sending, setSending] = useState(false);
+  const [delivery, setDelivery] = useState<DirectiveDelivery | null>(null);
+
   const investigate = async () => {
     if (!selected || !directive.trim()) return;
     const task = createResearchTask(selected.id, directive.trim(), []);
     const text = buildDirective(selected, task, workspace.senderName);
     setLastDirective(text);
     setDirective('');
-    if (desktop) {
-      await desktop.chatgpt.open(text);
-      toast('Directiva enviada a la ventana de ChatGPT (y copiada al portapapeles).', 'success');
-    } else {
-      await copyToClipboard(text);
-      toast('Directiva copiada al portapapeles.', 'info');
+    setDelivery(null);
+    if (!desktop) return;
+    setSending(true);
+    try {
+      if (!isDockOpen()) {
+        setDockOpen(true);
+        await new Promise((r) => setTimeout(r, 600)); // let the dock place the view
+      }
+      const st = getState();
+      const scope = currentScope(st);
+      const link = linkFor(st, scope);
+      const result = await desktop.chatgpt.sendDirective(text, link?.url);
+      setDelivery(result);
+      if (result.delivered) {
+        logTaskEvent(task.id, `Directiva entregada en ChatGPT (conversación ${result.conversationId?.slice(0, 8) ?? '?'}), confirmada en el chat.`);
+        if (!link && result.url) saveConversationLink(scope.key, result.url, 'first_directive');
+        toast('Directiva entregada en la conversación de ChatGPT.', 'success');
+      } else {
+        logTaskEvent(task.id, `Directiva NO entregada (${result.stage}): ${result.reason ?? ''}`);
+        toast(`No se entregó la directiva: ${result.reason ?? result.stage}`, 'error');
+      }
+    } finally {
+      setSending(false);
     }
   };
 
@@ -155,7 +181,7 @@ export default function Campaigns() {
               <Card>
                 <CardHeader
                   title="Investigar con ChatGPT"
-                  subtitle="La app crea la tarea, abre tu conversación real de ChatGPT con la directiva y ChatGPT guarda las fichas por el conector."
+                  subtitle="La app crea la tarea, la escribe y la envía en la conversación de ChatGPT de esta campaña (panel a la derecha) y confirma que llegó. ChatGPT guarda las fichas por el conector."
                 />
                 <div className="space-y-3 px-5 py-4">
                   <Textarea
@@ -166,20 +192,28 @@ export default function Campaigns() {
                     data-testid="directive-input"
                   />
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button onClick={() => void investigate()} disabled={!directive.trim()} data-testid="directive-send">
+                    <Button onClick={() => void investigate()} disabled={!directive.trim() || sending} loading={sending} data-testid="directive-send">
                       <Search className="h-4 w-4" /> Investigar
                     </Button>
-                    {desktop && (
-                      <Button variant="ghost" onClick={() => void desktop.chatgpt.open()}>
-                        <Bot className="h-4 w-4" /> Abrir ChatGPT
-                      </Button>
-                    )}
                     {lastDirective && (
-                      <Button variant="ghost" onClick={() => void copyToClipboard(lastDirective).then(() => toast('Copiado.', 'info'))}>
-                        <ClipboardCopy className="h-4 w-4" /> Copiar última directiva
+                      <Button
+                        variant="ghost"
+                        onClick={() => void copyToClipboard(lastDirective).then(() => toast('Copiada. Esto es un respaldo manual, no el envío automático.', 'info'))}
+                      >
+                        <ClipboardCopy className="h-4 w-4" /> Copiar directiva (respaldo manual)
                       </Button>
                     )}
                   </div>
+                  {delivery && (
+                    <p
+                      className={cn('text-xs', delivery.delivered ? 'text-emerald-700' : 'text-rose-700')}
+                      data-testid="directive-delivery"
+                    >
+                      {delivery.delivered
+                        ? `Entregada y confirmada en la conversación ${delivery.conversationId?.slice(0, 8) ?? ''}. ChatGPT ya está trabajando: las fichas aparecen abajo cuando las guarde.`
+                        : `No entregada (etapa: ${delivery.stage}). ${delivery.reason ?? ''}`}
+                    </p>
+                  )}
                   {tasks.length > 0 && (
                     <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 text-sm">
                       {tasks.slice().reverse().map((t) => (

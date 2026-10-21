@@ -25,7 +25,8 @@ import People from './pages/People';
 import FollowUps from './pages/FollowUps';
 import Pipeline from './pages/Pipeline';
 import Opportunities from './pages/Opportunities';
-import Assistant from './pages/Assistant';
+import ChatGptDock, { DOCK_WIDTH_CSS } from './components/ChatGptDock';
+import { setDockOpen, useDockOpen } from './lib/dockStore';
 import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
 import { isDesktopMode } from './lib/desktop';
@@ -38,7 +39,6 @@ const NAV = [
   ...(isDesktopMode()
     ? [
         { to: '/campaigns', label: 'Campañas', icon: FolderKanban },
-        { to: '/assistant', label: 'Asistente', icon: Bot },
       ]
     : []),
   { to: '/companies', label: 'Companies', icon: Building2 },
@@ -47,7 +47,7 @@ const NAV = [
   { to: '/pipeline', label: 'Pipeline', icon: Kanban },
   { to: '/opportunities', label: 'Opportunities', icon: Landmark },
   { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { to: '/cost-estimator', label: 'Cost Estimator', icon: Calculator },
+  { to: '/cost-estimator', label: isDesktopMode() ? 'Costos' : 'Cost Estimator', icon: Calculator },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -75,6 +75,8 @@ function SessionFooter() {
 export default function App() {
   const state = useAppState();
   const workspace = activeWorkspace(state);
+  const dockOpen = useDockOpen();
+  const showDock = isDesktopMode() && dockOpen;
 
   return (
     <div className="flex min-h-screen">
@@ -135,6 +137,22 @@ export default function App() {
           ))}
         </nav>
 
+        {isDesktopMode() && (
+          <div className="px-3 pb-3">
+            <button
+              onClick={() => setDockOpen(!dockOpen)}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium',
+                dockOpen ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 hover:bg-brand-100',
+              )}
+              data-testid="dock-toggle"
+            >
+              <Bot className="h-4 w-4 shrink-0" />
+              {dockOpen ? 'Ocultar ChatGPT' : 'ChatGPT'}
+            </button>
+          </div>
+        )}
+
         <div className="border-t border-slate-100 px-5 py-3">
           {isCloudMode() ? (
             <SessionFooter />
@@ -164,7 +182,10 @@ export default function App() {
         ))}
       </div>
 
-      <main className="min-w-0 flex-1 px-4 pb-16 pt-14 md:ml-60 md:px-8 md:pt-6">
+      <main
+        className="min-w-0 flex-1 px-4 pb-16 pt-14 md:ml-60 md:px-8 md:pt-6"
+        style={showDock ? { marginRight: DOCK_WIDTH_CSS } : undefined}
+      >
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<Dashboard />} />
@@ -175,13 +196,14 @@ export default function App() {
           <Route path="/pipeline" element={<Pipeline />} />
           <Route path="/opportunities" element={<Opportunities />} />
           <Route path="/campaigns" element={<Campaigns />} />
-          <Route path="/assistant" element={<Assistant />} />
+          <Route path="/assistant" element={<Navigate to="/campaigns" replace />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/cost-estimator" element={<CostEstimator />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </main>
+      {showDock && <ChatGptDock />}
     </div>
   );
 }

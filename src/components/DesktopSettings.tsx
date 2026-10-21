@@ -1,10 +1,13 @@
 // Desktop-only settings: managed-Chrome bridge (with the innocuous self-test
-// that writes its result into the CRM), Anthropic BYOK key, local backups.
+// that writes its result into the CRM), hosted ChatGPT connector, Claude
+// executor status, local backups.
 
 import { useEffect, useState } from 'react';
-import { Bot, Chrome, Cloud, KeyRound, Play, RefreshCw, ShieldCheck, Square, Trash2 } from 'lucide-react';
+import { Bot, Chrome, Cloud, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
 import { desktopApi } from '../lib/desktop';
 import type { CloudRelayStatus } from '../lib/desktop';
+import { EXECUTOR } from '../lib/executor';
+import { setDockOpen } from '../lib/dockStore';
 import { appendBridgeLog, useAppState } from '../lib/store';
 import { formatDateTime } from '../lib/utils';
 import { Badge, Button, Card, CardHeader, Field, Input } from './ui';
@@ -16,17 +19,13 @@ export default function DesktopSettings() {
   const { toast } = useToast();
   const [bridgeRunning, setBridgeRunning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [keyStatus, setKeyStatus] = useState<{ stored: boolean; last4: string | null }>({
-    stored: false,
-    last4: null,
-  });
-  const [keyDraft, setKeyDraft] = useState('');
+  const [legacyKey, setLegacyKey] = useState(false);
   const [backups, setBackups] = useState<{ file: string; bytes: number }[]>([]);
 
   useEffect(() => {
     if (!desktop) return;
     void desktop.bridge.status().then((s) => setBridgeRunning(s.running));
-    void desktop.secrets.anthropicKeyStatus().then(setKeyStatus);
+    void desktop.legacyKey.status().then((s) => setLegacyKey(s.stored));
     void desktop.listBackups().then(setBackups);
   }, [desktop]);
 
@@ -146,61 +145,39 @@ export default function DesktopSettings() {
 
       <CloudConnectorSection />
 
-      <Card>
+      <Card data-testid="executor-section">
         <CardHeader
-          title="Clave de Anthropic (BYOK)"
-          subtitle="Se cifra con el almacenamiento seguro del sistema. Nunca se guarda en texto plano ni sale de tu máquina salvo hacia la API de Anthropic."
+          title="Ejecutor del navegador (Claude)"
+          subtitle="Claude ejecuta los lotes aprobados con Chrome visible, mediante una sesión de suscripción autorizada. No usa la API de Anthropic."
         />
-        <div className="space-y-3 px-5 py-4">
-          {keyStatus.stored ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">
-                <ShieldCheck className="h-3 w-3" /> Clave guardada (···{keyStatus.last4})
-              </Badge>
+        <div className="space-y-2 px-5 py-4 text-sm">
+          <dl className="grid grid-cols-[180px_1fr] gap-x-3 gap-y-1">
+            <dt className="text-slate-500">Cuenta</dt>
+            <dd>{EXECUTOR.account}</dd>
+            <dt className="text-slate-500">Modelo elegido</dt>
+            <dd>
+              {EXECUTOR.modelName} (<code>{EXECUTOR.modelId}</code>)
+            </dd>
+            <dt className="text-slate-500">Disponibilidad</dt>
+            <dd>{EXECUTOR.availability}</dd>
+            <dt className="text-slate-500">Modelo alternativo</dt>
+            <dd>{EXECUTOR.fallback}</dd>
+          </dl>
+          {legacyKey && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Hay una clave de API de Anthropic guardada por una versión anterior. Esta versión no la usa.
               <Button
                 size="sm"
                 variant="ghost"
                 onClick={() =>
-                  run('clearkey', async () => {
-                    await desktop.secrets.clearAnthropicKey();
-                    setKeyStatus({ stored: false, last4: null });
+                  run('legacykey', async () => {
+                    await desktop.legacyKey.delete();
+                    setLegacyKey(false);
                     toast('Clave eliminada.', 'info');
                   })
                 }
               >
-                <Trash2 className="h-3.5 w-3.5" /> Eliminar clave
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="min-w-64 flex-1">
-                <Field
-                  label="API key"
-                  hint="console.anthropic.com → API Keys. Configurá antes un límite de gasto en TU consola."
-                >
-                  <Input
-                    type="password"
-                    placeholder="sk-ant-…"
-                    value={keyDraft}
-                    onChange={(e) => setKeyDraft(e.target.value)}
-                    data-testid="anthropic-key-input"
-                  />
-                </Field>
-              </div>
-              <Button
-                loading={busy === 'setkey'}
-                disabled={!keyDraft.trim()}
-                onClick={() =>
-                  run('setkey', async () => {
-                    const r = await desktop.secrets.setAnthropicKey(keyDraft.trim());
-                    setKeyStatus({ stored: true, last4: r.last4 });
-                    setKeyDraft('');
-                    toast('Clave guardada cifrada.', 'success');
-                  })
-                }
-                data-testid="anthropic-key-save"
-              >
-                <KeyRound className="h-4 w-4" /> Guardar
+                <Trash2 className="h-3.5 w-3.5" /> Eliminar
               </Button>
             </div>
           )}
@@ -298,8 +275,8 @@ function CloudConnectorSection() {
               </Button>
             </>
           )}
-          <Button size="sm" variant="ghost" onClick={() => void desktop.chatgpt.open()}>
-            <Bot className="h-3.5 w-3.5" /> Abrir ChatGPT en la app
+          <Button size="sm" variant="ghost" onClick={() => setDockOpen(true)}>
+            <Bot className="h-3.5 w-3.5" /> Mostrar el panel de ChatGPT
           </Button>
         </div>
 

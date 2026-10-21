@@ -161,3 +161,5 @@ email enrichment simultaneously breaks the budget; enable at most one.
 The interactive **Cost Estimator** page in the prototype implements this model
 with adjustable assumptions, reading unit prices from
 `src/data/pricing.json` (a local file — no live API calls).
+
+> **2026-10-21:** retirado del producto. La arquitectura usa suscripciones (ChatGPT en la app, Claude como ejecutor) y no API medidas; la página Costos muestra solo servicios reales. Este documento queda como histórico.

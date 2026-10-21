@@ -1,6 +1,6 @@
 // Electron main process — Prospecting Copilot desktop shell.
 // Responsibilities: window lifecycle, file-backed persistence (IPC),
-// managed-Chrome bridge (CDP), and the local agent (BYOK, M4).
+// managed-Chrome bridge (CDP), ChatGPT docked view, cloud relay for the MCP connector.
 // The renderer is the SAME React app, running in "desktop" mode.
 
 const { app, BrowserWindow, dialog, ipcMain, shell, safeStorage } = require('electron');
@@ -11,9 +11,9 @@ const bridge = require('./bridge.cjs');
 const mcpServer = require('./mcpServer.cjs');
 const crmTools = require('./crmTools.cjs');
 const relay = require('./relay.cjs');
+const chatgptView = require('./chatgptView.cjs');
 
 let mainWindow = null;
-let chatgptWindow = null;
 
 const isDev = !app.isPackaged;
 
@@ -147,48 +147,21 @@ ipcMain.handle('cloud:syncNow', async () => {
 ipcMain.handle('store:read', () => storeFile.readStateSync(dataDir()));
 
 // ---------------------------------------------------------------------------
-// ChatGPT view: chatgpt.com in a dedicated app window with a persistent session
-// (partition persist:chatgpt). The user logs in once; directives are opened as
-// a new conversation with the directive prefilled (?q=) — exploratory, so the
-// directive text is ALSO copied to the clipboard as the guaranteed path.
+// ChatGPT docked inside the main window (chatgptView.cjs). The user's own web
+// session; no OpenAI API. Directives are typed + sent and delivery confirmed.
 // ---------------------------------------------------------------------------
 
-function openChatGpt(directive) {
-  const { clipboard } = require('electron');
-  if (directive) clipboard.writeText(directive);
-  const url = directive
-    ? `https://chatgpt.com/?q=${encodeURIComponent(directive)}`
-    : 'https://chatgpt.com/';
-  if (chatgptWindow && !chatgptWindow.isDestroyed()) {
-    chatgptWindow.loadURL(url);
-    chatgptWindow.focus();
-    return { opened: true, reused: true };
-  }
-  chatgptWindow = new BrowserWindow({
-    width: 1100,
-    height: 820,
-    title: 'ChatGPT — Prospecting Copilot',
-    webPreferences: { partition: 'persist:chatgpt', sandbox: true, contextIsolation: true, nodeIntegration: false },
-  });
-  chatgptWindow.webContents.setUserAgent(
-    chatgptWindow.webContents.getUserAgent().replace(/ Electron\/[\d.]+/, '').replace(/ prospecting-copilot-prototype\/[\d.]+/, ''),
-  );
-  chatgptWindow.webContents.setWindowOpenHandler(({ url: u }) => {
-    if (/^https:\/\/(chatgpt\.com|auth\.openai\.com|auth0\.openai\.com|accounts\.google\.com|login\.microsoftonline\.com|appleid\.apple\.com|vqyhxjjirskadwomfjkp\.supabase\.co|santiagoravotti\.github\.io)/.test(u)) {
-      return { action: 'allow' };
-    }
-    shell.openExternal(u);
-    return { action: 'deny' };
-  });
-  chatgptWindow.on('closed', () => {
-    chatgptWindow = null;
-  });
-  chatgptWindow.loadURL(url);
-  return { opened: true, reused: false };
-}
-
-ipcMain.handle('chatgpt:open', (_e, directive) => openChatGpt(directive));
-ipcMain.handle('chatgpt:status', () => ({ open: Boolean(chatgptWindow && !chatgptWindow.isDestroyed()) }));
+chatgptView.setNavigateListener((nav) => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('chatgpt:navigated', nav);
+});
+ipcMain.handle('chatgpt:show', (_e, bounds) => chatgptView.show(mainWindow, bounds));
+ipcMain.handle('chatgpt:setBounds', (_e, bounds) => chatgptView.setBounds(bounds));
+ipcMain.handle('chatgpt:hide', () => chatgptView.hide());
+ipcMain.handle('chatgpt:open', (_e, url) => chatgptView.open(mainWindow, url));
+ipcMain.handle('chatgpt:status', () => chatgptView.status());
+ipcMain.handle('chatgpt:sendDirective', (_e, text, conversationUrl) =>
+  chatgptView.sendDirective(mainWindow, String(text || ''), { conversationUrl: conversationUrl || undefined }),
+);
 
 // ---------------------------------------------------------------------------
 // IPC: persistence
@@ -239,56 +212,20 @@ ipcMain.handle('bridge:selfTest', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// IPC: secrets (BYOK — the API key never reaches the renderer again)
+// Legacy: an Anthropic API key saved by an earlier build (BYOK assistant, now
+// removed). Never used. Settings shows whether one exists and can delete it.
 // ---------------------------------------------------------------------------
 
-const SECRET_FILE = () => path.join(dataDir(), 'secrets.bin');
-
-ipcMain.handle('secrets:setAnthropicKey', (_e, key) => {
-  if (typeof key !== 'string' || !key.startsWith('sk-ant-')) {
-    throw new Error('That does not look like an Anthropic API key.');
-  }
-  if (!safeStorage.isEncryptionAvailable()) {
-    throw new Error('OS-level encryption unavailable; refusing to store the key.');
-  }
-  fs.writeFileSync(SECRET_FILE(), safeStorage.encryptString(key));
-  return { stored: true, last4: key.slice(-4) };
-});
-
-ipcMain.handle('secrets:anthropicKeyStatus', () => {
+const LEGACY_SECRET_FILE = () => path.join(dataDir(), 'secrets.bin');
+ipcMain.handle('legacyKey:status', () => ({ stored: fs.existsSync(LEGACY_SECRET_FILE()) }));
+ipcMain.handle('legacyKey:delete', () => {
   try {
-    const buf = fs.readFileSync(SECRET_FILE());
-    const key = safeStorage.decryptString(buf);
-    return { stored: true, last4: key.slice(-4) };
-  } catch {
-    return { stored: false, last4: null };
-  }
-});
-
-ipcMain.handle('secrets:clearAnthropicKey', () => {
-  try {
-    fs.rmSync(SECRET_FILE());
+    fs.rmSync(LEGACY_SECRET_FILE());
   } catch {
     /* already gone */
   }
   return { stored: false };
 });
-
-/** Internal helper for the agent (main-process only). */
-function getAnthropicKey() {
-  const buf = fs.readFileSync(SECRET_FILE());
-  return safeStorage.decryptString(buf);
-}
-
-// Agent IPC (M4) — registered here so the preload surface is stable.
-const agent = require('./agent.cjs');
-ipcMain.handle('agent:chat', (e, payload) =>
-  agent.chat(payload, {
-    getKey: getAnthropicKey,
-    bridge,
-    sendEvent: (ev) => e.sender.send('agent:event', ev),
-  }),
-);
 
 // ---------------------------------------------------------------------------
 // Self-verification harnesses (CI/dev): exercise the REAL code paths headlessly.
@@ -372,9 +309,21 @@ async function runRendererSmoke() {
         ),
       );
       live.cloud = cloud;
+      // ChatGPT docked next to the CRM; no BYOK anywhere in the main path.
+      const ui = JSON.parse(
+        await win.webContents.executeJavaScript(
+          `JSON.stringify({ dock: Boolean(document.querySelector('[data-testid="chatgpt-dock"]')), slot: (() => { const r = document.querySelector('[data-testid="chatgpt-view-slot"]')?.getBoundingClientRect(); return r ? Math.round(r.width) + 'x' + Math.round(r.height) : null; })(), byok: /BYOK|sk-ant|Clave de Anthropic/i.test(document.body.innerText), asistenteNav: Array.from(document.querySelectorAll('nav a')).some(a => a.textContent.trim() === 'Asistente') })`,
+        ),
+      );
+      await win.webContents.executeJavaScript(`location.hash = '#/cost-estimator'`);
+      await new Promise((r) => setTimeout(r, 800));
+      ui.costsApiTokens = await win.webContents.executeJavaScript(`/tokens? de entrada|input tokens|Batch API|per 1M|por 1M/i.test(document.body.innerText)`);
+      ui.costsPage = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-testid="costs-table"]'))`);
+      ui.view = await chatgptView.status();
+      live.ui = ui;
       console.log('SMOKE_RESULT ' + probe + ' LIVE ' + JSON.stringify(live));
       const r = JSON.parse(probe);
-      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) && live.cloud.section && !live.cloud.tunnelMentioned ? 0 : 1);
+      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) && live.cloud.section && !live.cloud.tunnelMentioned && live.ui.dock && live.ui.view.attached && !live.ui.byok && !live.ui.asistenteNav && live.ui.costsPage && !live.ui.costsApiTokens ? 0 : 1);
     } catch (e) {
       console.error('SMOKE_ERROR ' + e.message);
       app.exit(1);
@@ -487,9 +436,46 @@ async function runMcpSelfTest() {
   }
 }
 
+
+/**
+ * PC_CHATGPT_PROBE=1 → exploratory check of the docked-view mechanics against
+ * the real chatgpt.com, in a SEPARATE logged-out session (persist:chatgpt-probe),
+ * never the user's. Loads ChatGPT, detects session state, finds the composer and
+ * types a directive, then STOPS before sending (dryRun). Sending is verified only
+ * with the user's own signed-in session.
+ */
+async function runChatGptProbe() {
+  // The probe session is throwaway: start clean every run (never the user's partition).
+  await require('electron').session.fromPartition('persist:chatgpt-probe').clearStorageData();
+  const win = new BrowserWindow({ width: 1300, height: 900, show: true });
+  win.loadURL('data:text/html,<body style="margin:0">probe</body>');
+  chatgptView.ensure(win, { partition: 'persist:chatgpt-probe' });
+  chatgptView.show(win, { x: 0, y: 0, width: 1300, height: 900 });
+  try {
+    const r = await chatgptView.sendDirective(win, 'Prospecting Copilot probe: texto de prueba, no enviar.', {
+      allowLoggedOut: true,
+      dryRun: true,
+    });
+    const st = await chatgptView.status();
+    if (r.stage !== 'dry_run') {
+      const diag = await chatgptView.diagnose();
+      console.log('CHATGPT_PROBE_DIAG ' + JSON.stringify(diag));
+    }
+    console.log('CHATGPT_PROBE_RESULT ' + JSON.stringify({ ...r, loggedIn: st.loggedIn }));
+    app.exit(r.stage === 'dry_run' ? 0 : 1);
+  } catch (e) {
+    console.error('CHATGPT_PROBE_ERROR ' + (e.stack || e.message));
+    app.exit(1);
+  }
+}
+
 app.whenReady().then(() => {
   // Expose where state lives so the preload can boot-read it synchronously.
   process.env.PC_DATA_DIR = dataDir();
+  if (process.env.PC_CHATGPT_PROBE === '1') {
+    void runChatGptProbe();
+    return;
+  }
   if (process.env.PC_MCP_SELFTEST === '1') {
     process.env.PC_MCP_AUTOCONSENT = '1';
     void runMcpSelfTest();

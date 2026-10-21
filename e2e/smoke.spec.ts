@@ -148,16 +148,11 @@ test('XLSX export triggers a download', async ({ page }) => {
   expect(download.suggestedFilename()).toBe('prospects.xlsx');
 });
 
-test('cost estimator warning above €100', async ({ page }) => {
-  // 15. Change cost assumptions / 16. Confirm the warning appears above €100
+test('costs page lists real services and no API token budget', async ({ page }) => {
   await freshApp(page, '/#/cost-estimator');
-  await expect(page.getByTestId('budget-ok')).toBeVisible();
-  await page.getByTestId('cost-capable-percent').fill('100');
-  await page.getByTestId('cost-runs').fill('80');
-  await page.getByTestId('cost-candidates').fill('500');
-  await page.getByTestId('cost-enrichment').selectOption('hunter-starter');
-  await expect(page.getByTestId('budget-warning')).toBeVisible();
-  await expect(page.getByTestId('budget-warning')).toContainText('exceeds');
+  await expect(page.getByTestId('costs-table')).toContainText('Supabase');
+  await expect(page.getByTestId('costs-table')).toContainText('No disponible');
+  await expect(page.getByTestId('costs-not-used')).toContainText('API de Anthropic');
 });
 
 test('local persistence survives a reload', async ({ page }) => {

@@ -32,8 +32,17 @@ contextBridge.exposeInMainWorld('desktop', {
   },
 
   chatgpt: {
-    open: (directive) => ipcRenderer.invoke('chatgpt:open', directive),
+    show: (bounds) => ipcRenderer.invoke('chatgpt:show', bounds),
+    setBounds: (bounds) => ipcRenderer.invoke('chatgpt:setBounds', bounds),
+    hide: () => ipcRenderer.invoke('chatgpt:hide'),
+    open: (url) => ipcRenderer.invoke('chatgpt:open', url),
     status: () => ipcRenderer.invoke('chatgpt:status'),
+    sendDirective: (text, conversationUrl) => ipcRenderer.invoke('chatgpt:sendDirective', text, conversationUrl),
+    onNavigated: (handler) => {
+      const listener = (_e, nav) => handler(nav);
+      ipcRenderer.on('chatgpt:navigated', listener);
+      return () => ipcRenderer.removeListener('chatgpt:navigated', listener);
+    },
   },
 
   bridge: {
@@ -45,18 +54,10 @@ contextBridge.exposeInMainWorld('desktop', {
     selfTest: () => ipcRenderer.invoke('bridge:selfTest'),
   },
 
-  secrets: {
-    setAnthropicKey: (key) => ipcRenderer.invoke('secrets:setAnthropicKey', key),
-    anthropicKeyStatus: () => ipcRenderer.invoke('secrets:anthropicKeyStatus'),
-    clearAnthropicKey: () => ipcRenderer.invoke('secrets:clearAnthropicKey'),
+  legacyKey: {
+    status: () => ipcRenderer.invoke('legacyKey:status'),
+    delete: () => ipcRenderer.invoke('legacyKey:delete'),
   },
 
-  agent: {
-    chat: (payload) => ipcRenderer.invoke('agent:chat', payload),
-    onEvent: (handler) => {
-      const listener = (_e, ev) => handler(ev);
-      ipcRenderer.on('agent:event', listener);
-      return () => ipcRenderer.removeListener('agent:event', listener);
-    },
-  },
+
 });

@@ -371,4 +371,17 @@ export interface AppState {
   /** Single execution queue per sender account: at most one running batch each. */
   executionLocks?: Record<string, { batchId: string; startedAt: string }>;
   channelLimits?: { linkedin_invite: ChannelLimitConfig };
+  /** Saved ChatGPT conversation per scope ("campaign:<id>" or "workspace:<id>"). */
+  chatgptConversations?: Record<string, ChatGptConversationLink>;
+  /** Campaign currently selected in Campañas (scopes the ChatGPT conversation). */
+  activeCampaignId?: string | null;
+}
+
+export interface ChatGptConversationLink {
+  /** https://chatgpt.com/c/<id> (or a project/GPT conversation URL). */
+  url: string;
+  conversationId: string;
+  boundAt: string;
+  /** How it got linked: the app's first delivered directive, or the user's explicit choice. */
+  source: 'first_directive' | 'user_choice';
 }

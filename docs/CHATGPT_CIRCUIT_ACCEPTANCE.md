@@ -86,6 +86,16 @@ el consentimiento.
 Si falla, anotá el paso: (3) descubrimiento OAuth o consentimiento, (4) ChatGPT no llama herramientas,
 (5) las fichas no aparecen. Cada uno tiene un remedio distinto y ninguno requiere API de pago ni otro chatbot.
 
+
+## Actualización 2026-10-21: ChatGPT integrado junto al CRM
+
+- **Asistente BYOK eliminado.** La pantalla "Asistente" era el módulo del sprint de escritorio que llamaba a la API de Anthropic (Haiku 4.5) con tu clave. Se quitó del menú, del código y de las dependencias. Si quedó una clave guardada, Settings ofrece borrarla.
+- **ChatGPT en un panel a la derecha**, con tu sesión web (partición persistente). La conversación se guarda por campaña, con respaldo en la del espacio de trabajo. El panel permite retomar la guardada, adoptar la que está abierta o iniciar una nueva.
+- **Investigar** escribe la directiva en esa conversación y pulsa enviar. Solo la marca como entregada cuando el mensaje aparece en el chat. Si falla, informa la etapa: sin sesión, sin cuadro de mensaje, borrador existente, inserción, envío o confirmación. El portapapeles queda solo como respaldo manual.
+- **Verificado contra chatgpt.com real**, en una sesión aparte y sin login: carga, detección del cuadro de mensaje, inserción del texto, botón de enviar detectado y habilitado, sin enviar. **Falta verificar con tu sesión** el editor con login, el envío, la confirmación y la URL de la conversación.
+- **Claude como ejecutor**: el modelo elegido es Sonnet 5.5 (`claude-sonnet-5-5`), sin modelo alternativo. La disponibilidad no está verificada porque no hay cuenta autorizada.
+- **Costos**: la página muestra los servicios reales (ChatGPT Plus, Supabase Free, GitHub) y "no disponible" donde no hay dato. Se retiraron los cálculos de tokens y la búsqueda paga.
+
 ## Fuera de este hito
 
 - LinkedIn en solo lectura y dry-run con Claude y Chrome visible: la cuenta de Claude está pendiente y la Team no está autorizada.
