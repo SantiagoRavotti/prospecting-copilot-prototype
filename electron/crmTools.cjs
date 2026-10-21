@@ -184,7 +184,7 @@ const TOOLS = [
   {
     name: 'save_draft',
     description:
-      'Save a new draft message for an existing prospect (previous versions are kept; any prior approval is invalidated).',
+      'Propose a new draft message for an existing prospect. It is stored as a proposal the user can apply; it never overwrites an edited or approved message.',
     schema: {
       type: 'object',
       properties: { prospect_id: str, draft_message: str, reason: str },
@@ -195,23 +195,28 @@ const TOOLS = [
       const s = readState(dir);
       const p = s.prospects.find((x) => x.id === input.prospect_id || x.id.startsWith(input.prospect_id));
       if (!p) throw new Error('Prospect not found');
-      p.editedMessage = input.draft_message;
-      p.editedAt = now();
-      p.lastActivityAt = now();
-      if (p.approval && p.approval.status === 'approved') {
-        p.approval = { status: 'pending', approvedText: null, approvedAt: null };
+      // Additive: the draft enters as a PROPOSAL the user may apply. It never
+      // replaces an edited or approved message by itself.
+      const text = String(input.draft_message || '').trim();
+      if (!text) throw new Error('draft_message is empty');
+      p.messageProposals = p.messageProposals || [];
+      const known = new Set(p.messageProposals.map((x) => x.text));
+      known.add(p.editedMessage != null ? p.editedMessage : p.originalDraft);
+      if (!known.has(text)) {
+        p.messageProposals.push({ id: uid(), text, createdAt: now(), source: 'chatgpt_mcp', status: 'pending' });
       }
+      p.lastActivityAt = now();
       s.activities.push({
         id: uid(),
         prospectId: p.id,
         type: 'message_edited',
         previousStatus: null,
         newStatus: null,
-        notes: 'Draft from ChatGPT' + (input.reason ? `: ${input.reason}` : ''),
+        notes: 'Draft proposal from ChatGPT' + (input.reason ? `: ${input.reason}` : ''),
         createdAt: now(),
       });
       writeState(dir, s);
-      return { ok: true, prospect_id: p.id };
+      return { ok: true, prospect_id: p.id, stored_as: 'proposal' };
     },
   },
   {

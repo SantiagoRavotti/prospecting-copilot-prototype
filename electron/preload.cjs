@@ -23,6 +23,13 @@ contextBridge.exposeInMainWorld('desktop', {
     return () => ipcRenderer.removeListener('crm:refresh', listener);
   },
 
+  files: {
+    saveText: (defaultName, content) => ipcRenderer.invoke('files:saveText', { defaultName, content }),
+  },
+  external: {
+    openChatGpt: (url) => ipcRenderer.invoke('external:openChatGpt', url),
+  },
+
   cloud: {
     status: () => ipcRenderer.invoke('cloud:status'),
     sendCode: (email) => ipcRenderer.invoke('cloud:sendCode', email),

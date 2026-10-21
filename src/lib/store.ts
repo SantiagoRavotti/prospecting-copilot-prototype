@@ -20,7 +20,7 @@ import { desktopApi } from './desktop';
 import { isCloudMode } from './supabaseClient';
 import { emptyCloudState } from './sync/mappers';
 import { sanitizeForPersist } from './secretsGuard';
-import { invalidateApprovalIfChanged } from './campaigns';
+import { finalText, mergeExternalChanges, withMessage } from './campaigns';
 import { nowIso, uid } from './utils';
 
 export const STORAGE_KEY = 'prospecting-copilot-state-v1';
@@ -270,8 +270,7 @@ export function skipProspect(prospectId: string): void {
 export function saveMessage(prospectId: string, message: string): void {
   setState((prev) => {
     const prospect = prev.prospects.find((p) => p.id === prospectId);
-    if (!prospect) return prev;
-    const now = nowIso();
+    if (!prospect || finalText(prospect) === message) return prev;
     const isReset = message === prospect.originalDraft;
     const activity = logActivity(
       prospectId,
@@ -280,16 +279,7 @@ export function saveMessage(prospectId: string, message: string): void {
     );
     return {
       ...prev,
-      prospects: prev.prospects.map((p) =>
-        p.id === prospectId
-          ? invalidateApprovalIfChanged({
-              ...p,
-              editedMessage: isReset ? null : message,
-              editedAt: isReset ? null : now,
-              lastActivityAt: now,
-            })
-          : p,
-      ),
+      prospects: prev.prospects.map((p) => (p.id === prospectId ? withMessage(p, message, isReset ? 'reset' : 'edit') : p)),
       activities: [...prev.activities, activity],
     };
   });
@@ -466,7 +456,7 @@ export function startCrmRefreshListener(): () => void {
       if (!raw) return;
       try {
         const parsed = JSON.parse(raw) as AppState;
-        if (parsed && Array.isArray(parsed.prospects)) replaceState(parsed);
+        if (parsed && Array.isArray(parsed.prospects)) setState((cur) => mergeExternalChanges(cur, parsed));
       } catch (e) {
         console.error('[store] crm refresh failed:', e);
       }

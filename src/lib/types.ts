@@ -140,6 +140,28 @@ export interface Prospect {
   campaignId?: string;
   approval?: ProspectApproval;
   research?: ProspectResearch;
+  /** New message versions from ChatGPT. They never replace the current text by themselves. */
+  messageProposals?: MessageProposal[];
+  /** Previous message texts that were replaced (edits, applied proposals, resets). */
+  messageHistory?: MessageHistoryEntry[];
+}
+
+export interface MessageProposal {
+  id: string;
+  text: string;
+  createdAt: string;
+  source: 'chatgpt_import' | 'chatgpt_mcp';
+  importId?: string;
+  status: 'pending' | 'applied' | 'dismissed';
+}
+
+export interface MessageHistoryEntry {
+  /** The text that was replaced. */
+  text: string;
+  /** When it was replaced. */
+  at: string;
+  reason: 'edit' | 'proposal_applied' | 'reset' | 'restore';
+  wasApproved: boolean;
 }
 
 export type ActivityType =
@@ -195,6 +217,8 @@ export interface Campaign {
   targetCount: number;
   exclusions: string[];
   messageGuidelines: string;
+  /** Saved examples of the user's style, included in every research package. */
+  styleExamples?: string[];
   schedule: { prepDate?: string; executeDate?: string; dailyCap: number };
   status: CampaignStatus;
   createdAt: string;
@@ -252,6 +276,18 @@ export interface ProspectApproval {
 }
 
 export interface ProspectResearch {
+  /** Where this research came from. ChatGPT-provided sources are NOT verified by the app. */
+  origin?: 'chatgpt_import' | 'mcp';
+  importId?: string;
+  /** Stable identity of the candidate inside one research task (re-import detection). */
+  importKey?: string;
+  location?: string;
+  /** Facts with the source ChatGPT gave for each (kept alongside verifiedFacts). */
+  facts?: { text: string; sourceUrl?: string }[];
+  photoSource?: string;
+  /** Did ChatGPT say it could read LinkedIn posts? null = not stated. */
+  postsAccessible?: boolean | null;
+  limitations?: string[];
   verifiedFacts: string[];
   inferences: string[];
   posts: CollectedPost[];
@@ -371,6 +407,8 @@ export interface AppState {
   /** Single execution queue per sender account: at most one running batch each. */
   executionLocks?: Record<string, { batchId: string; startedAt: string }>;
   channelLimits?: { linkedin_invite: ChannelLimitConfig };
+  /** One record per confirmed import of a ChatGPT research result. */
+  importHistory?: ImportRecord[];
   /** Saved ChatGPT conversation per scope ("campaign:<id>" or "workspace:<id>"). */
   chatgptConversations?: Record<string, ChatGptConversationLink>;
   /** Campaign currently selected in Campañas (scopes the ChatGPT conversation). */
@@ -384,4 +422,22 @@ export interface ChatGptConversationLink {
   boundAt: string;
   /** How it got linked: the app's first delivered directive, or the user's explicit choice. */
   source: 'first_directive' | 'user_choice';
+}
+
+export interface ImportRecord {
+  id: string;
+  at: string;
+  taskId: string;
+  campaignId: string;
+  /** Content fingerprint of the imported result (same result → same fingerprint). */
+  fingerprint: string;
+  input: 'file' | 'paste';
+  fileName?: string;
+  created: number;
+  updated: number;
+  unchanged: number;
+  skippedDuplicates: number;
+  invalid: number;
+  warnings: number;
+  prospectIds: string[];
 }

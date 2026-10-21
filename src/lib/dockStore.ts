@@ -4,8 +4,8 @@ import { useSyncExternalStore } from 'react';
 const KEY = 'pc-chatgpt-dock-open';
 let open = (() => {
   try {
-    // Desktop default: open, so the app starts with the user's conversation next to the CRM.
-    return localStorage.getItem(KEY) !== '0';
+    // Experimental and OFF by default: Google sign-in is blocked inside the embedded panel.
+    return localStorage.getItem(KEY) === '1';
   } catch {
     return false;
   }

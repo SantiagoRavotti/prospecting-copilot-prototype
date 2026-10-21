@@ -10,13 +10,13 @@ import { charCount, copyToClipboard } from '../lib/utils';
 import { Button, ConfirmDialog, Kbd, Textarea } from './ui';
 import { useToast } from './toast';
 
-const LINKEDIN_INVITE_LIMIT = 300;
+const DEFAULT_LIMIT = 300;
 
 export function currentMessage(prospect: Prospect): string {
   return prospect.editedMessage ?? prospect.originalDraft;
 }
 
-export default function MessageEditor({ prospect }: { prospect: Prospect }) {
+export default function MessageEditor({ prospect, limit = DEFAULT_LIMIT }: { prospect: Prospect; limit?: number }) {
   const { toast } = useToast();
   const [text, setText] = useState(() => currentMessage(prospect));
   const [confirmReset, setConfirmReset] = useState(false);
@@ -32,6 +32,17 @@ export default function MessageEditor({ prospect }: { prospect: Prospect }) {
     undoStack.current = [];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prospect.id]);
+
+  // The text can also change from outside (applying a ChatGPT proposal, restoring
+  // a previous version): follow it, but never discard what is being typed.
+  useEffect(() => {
+    const msg = currentMessage(prospect);
+    if (msg !== savedText.current) {
+      setText(msg);
+      savedText.current = msg;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prospect.editedMessage, prospect.originalDraft]);
 
   const count = charCount(text);
   const dirty = text !== savedText.current;
@@ -91,12 +102,12 @@ export default function MessageEditor({ prospect }: { prospect: Prospect }) {
         <span
           data-testid="char-count"
           className={
-            count > LINKEDIN_INVITE_LIMIT
+            count > limit
               ? 'text-xs font-semibold text-rose-600'
               : 'text-xs text-slate-400'
           }
         >
-          {count} / {LINKEDIN_INVITE_LIMIT} characters
+          {count} / {limit} characters
         </span>
       </div>
 
@@ -108,9 +119,9 @@ export default function MessageEditor({ prospect }: { prospect: Prospect }) {
         onChange={(e) => setText(e.target.value)}
         className="text-[15px]"
       />
-      {count > LINKEDIN_INVITE_LIMIT && (
+      {count > limit && (
         <p className="mt-1 text-xs text-rose-600">
-          LinkedIn connection notes are limited to {LINKEDIN_INVITE_LIMIT} characters.
+          Over the configured limit of {limit} characters.
         </p>
       )}
 

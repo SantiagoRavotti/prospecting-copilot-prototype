@@ -7,6 +7,7 @@ import { Bot, Chrome, Cloud, Play, RefreshCw, Square, Trash2 } from 'lucide-reac
 import { desktopApi } from '../lib/desktop';
 import type { CloudRelayStatus } from '../lib/desktop';
 import { EXECUTOR } from '../lib/executor';
+import { APP_VERSION } from '../lib/appVersion';
 import { setDockOpen } from '../lib/dockStore';
 import { appendBridgeLog, useAppState } from '../lib/store';
 import { formatDateTime } from '../lib/utils';
@@ -44,6 +45,16 @@ export default function DesktopSettings() {
 
   return (
     <>
+      <Card data-testid="about-section">
+        <CardHeader
+          title="Esta versión"
+          subtitle="Flujo por lotes con tu ChatGPT Plus: sin APIs de modelos, sin claves, sin servicios de pago."
+        />
+        <p className="px-5 py-3 text-sm text-slate-700">
+          Prospecting Copilot <b data-testid="about-version">v{APP_VERSION}</b> · tus datos se guardan en esta computadora (con copias diarias) y se sincronizan con tu cuenta solo si la conectás.
+        </p>
+      </Card>
+
       <Card>
         <CardHeader
           title="Puente con Chrome (escritorio)"
@@ -248,10 +259,15 @@ function CloudConnectorSection() {
   return (
     <Card data-testid="cloud-connector-section">
       <CardHeader
-        title="ChatGPT ↔ CRM (conector alojado)"
-        subtitle="ChatGPT usa el endpoint en Supabase (UE) con OAuth: solo accede después de que inicies sesión y apruebes. Esta app aplica lo que ChatGPT guarda; nada se envía a LinkedIn."
+        title="Cuenta en la nube y conector MCP (opcional · uso futuro)"
+        subtitle="No hace falta para el flujo por lotes con ChatGPT. Tu plan actual no permite añadir conectores MCP personalizados; el endpoint queda desplegado por si eso cambia."
       />
       <div className="space-y-3 px-5 py-4 text-sm">
+        <ul className="list-disc space-y-0.5 pl-5 text-xs text-slate-500" data-testid="cloud-explainer">
+          <li><b>Sesión de Supabase</b>: la cuenta con la que esta app guarda datos en la nube. No es el login de ChatGPT.</li>
+          <li><b>Enlace del email</b>: abre la web en GitHub Pages, no esta app. Para conectar la app usá el código, o copiá la dirección del enlace y pegala acá sin abrirlo.</li>
+          <li><b>URL del conector</b> (abajo): el endpoint MCP. Solo la usaría ChatGPT si algún día tu plan lo permite.</li>
+        </ul>
         <div className="flex flex-wrap items-center gap-2">
           <Badge
             className={
@@ -268,7 +284,7 @@ function CloudConnectorSection() {
                 Snapshot {status.lastPushAt ? formatDateTime(status.lastPushAt) : '—'} · aplicadas {status.applied} · fallidas {status.failed}
               </Badge>
               <Button size="sm" variant="ghost" loading={busy} onClick={() => act(async () => void (await desktop.cloud.syncNow()))}>
-                <RefreshCw className="h-3.5 w-3.5" /> Sincronizar
+                <RefreshCw className="h-3.5 w-3.5" /> Comprobar sesión
               </Button>
               <Button size="sm" variant="ghost" onClick={() => act(async () => void (await desktop.cloud.signOut()))}>
                 Desconectar
@@ -276,7 +292,7 @@ function CloudConnectorSection() {
             </>
           )}
           <Button size="sm" variant="ghost" onClick={() => setDockOpen(true)}>
-            <Bot className="h-3.5 w-3.5" /> Mostrar el panel de ChatGPT
+            <Bot className="h-3.5 w-3.5" /> Probar el panel de ChatGPT integrado (experimental)
           </Button>
         </div>
 
@@ -339,6 +355,11 @@ function CloudConnectorSection() {
           </p>
         </div>
 
+        {!status?.connected && status?.sessionFileReadable === false && (
+          <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800" data-testid="session-unreadable">
+            Había una sesión guardada pero esta app no pudo leerla (no la modifiqué). Volvé a conectar con un código del email. No se perdió nada del CRM: esta sesión solo sirve para la nube.
+          </p>
+        )}
         {status?.lastError && <p className="text-xs text-rose-600">Último error: {status.lastError}</p>}
         {status?.lastApplied.length ? (
           <ul className="max-h-40 space-y-1 overflow-auto rounded-lg border border-slate-200 p-2 text-xs" data-testid="relay-log">

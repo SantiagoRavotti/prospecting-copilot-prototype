@@ -37,6 +37,8 @@ export interface CloudRelayStatus {
   email: string | null;
   connectorUrl: string;
   encryptionAvailable: boolean;
+  /** null = no saved session file, true = readable, false = present but could not be decrypted. */
+  sessionFileReadable?: boolean | null;
   lastPushAt: string | null;
   lastPollAt: string | null;
   applied: number;
@@ -52,6 +54,13 @@ export interface DesktopApi {
   readState(): Promise<string | null>;
   listBackups(): Promise<{ file: string; bytes: number }[]>;
   onCrmRefresh(handler: () => void): () => void;
+  files: {
+    /** Real runs open a save dialog; returns null if the user cancels. */
+    saveText(defaultName: string, content: string): Promise<{ path: string } | null>;
+  };
+  external: {
+    openChatGpt(url: string): Promise<{ opened: string }>;
+  };
   cloud: {
     status(): Promise<CloudRelayStatus>;
     sendCode(email: string): Promise<{ sent: boolean }>;

@@ -1,3 +1,5 @@
+> **Reemplazado el 2026-10-21 por [BATCH_FLOW.md](BATCH_FLOW.md).** Tu plan de ChatGPT no permite añadir un servidor MCP personalizado, así que el circuito descrito abajo no puede completarse y ya no es un requisito del flujo actual. El endpoint y las herramientas siguen desplegados para un posible uso futuro. Estado de cada objetivo: [ROADMAP_STATUS.md](ROADMAP_STATUS.md).
+
 # Circuito ChatGPT ↔ CRM — estado y prueba de aceptación
 
 Actualizado 2026-10-20.

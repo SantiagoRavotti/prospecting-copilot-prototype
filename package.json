@@ -1,7 +1,7 @@
 {
   "name": "prospecting-copilot-prototype",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Prospecting Copilot — prospecting CRM with embedded assistant (web + desktop)",
   "main": "electron/main.cjs",
@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:flow": "node scripts/flow-e2e.cjs",
     "test:rls": "vitest run --config vitest.rls.config.ts"
   },
   "build": {

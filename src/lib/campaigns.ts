@@ -11,6 +11,8 @@ import type {
   Campaign,
   ChannelLimitConfig,
   CollectedProfile,
+  MessageHistoryEntry,
+  Person,
   Prospect,
   RecipientResultStatus,
   ResearchTask,
@@ -60,6 +62,7 @@ export function newCampaign(
     targetCount: input.targetCount ?? 20,
     exclusions: input.exclusions ?? [],
     messageGuidelines: input.messageGuidelines ?? '',
+    styleExamples: input.styleExamples ?? [],
     schedule: input.schedule ?? { dailyCap: 20 },
     status: input.status ?? 'active',
     createdAt: now,
@@ -145,6 +148,97 @@ export function checkApprovable(text: string, cfg: ChannelLimitConfig): Approval
     };
   }
   return { ok: true, chars, limit };
+}
+
+// ---------------------------------------------------------------------------
+// Message edits keep history; ChatGPT proposals never replace text by themselves
+// ---------------------------------------------------------------------------
+
+const HISTORY_KEEP = 30;
+
+/**
+ * Replace the current message. The replaced text is kept in messageHistory and
+ * an approval that no longer matches is invalidated. No-op when the text is the
+ * same, so repeated saves never churn history or approvals.
+ */
+export function withMessage(
+  p: Prospect,
+  message: string,
+  reason: MessageHistoryEntry['reason'],
+  now: string = nowIso(),
+): Prospect {
+  const previous = finalText(p);
+  if (message === previous) return p;
+  const wasApproved = p.approval?.status === 'approved' && p.approval.approvedText === previous;
+  const isReset = message === p.originalDraft;
+  const next: Prospect = {
+    ...p,
+    editedMessage: isReset ? null : message,
+    editedAt: isReset ? null : now,
+    lastActivityAt: now,
+    messageHistory: [...(p.messageHistory ?? []), { text: previous, at: now, reason, wasApproved }].slice(-HISTORY_KEEP),
+  };
+  return invalidateApprovalIfChanged(next);
+}
+
+/** Apply a pending proposal on explicit user choice. Invalidates a stale approval. */
+export function applyProposal(p: Prospect, proposalId: string, now: string = nowIso()): Prospect {
+  const proposal = (p.messageProposals ?? []).find((x) => x.id === proposalId);
+  if (!proposal || proposal.status !== 'pending') return p;
+  const replaced = withMessage(p, proposal.text, 'proposal_applied', now);
+  return {
+    ...replaced,
+    messageProposals: (p.messageProposals ?? []).map((x) => (x.id === proposalId ? { ...x, status: 'applied' as const } : x)),
+  };
+}
+
+export function dismissProposal(p: Prospect, proposalId: string): Prospect {
+  return {
+    ...p,
+    messageProposals: (p.messageProposals ?? []).map((x) =>
+      x.id === proposalId && x.status === 'pending' ? { ...x, status: 'dismissed' as const } : x,
+    ),
+  };
+}
+
+/** What a ficha still needs before it can be approved (and, later, executed). */
+export function essentialGaps(p: Prospect, person: Person | undefined): string[] {
+  const gaps: string[] = [];
+  if (!person?.fullName?.trim()) gaps.push('nombre');
+  if (!normalizeLinkedinUrl(person?.linkedinUrl)) gaps.push('URL de LinkedIn');
+  if (!finalText(p).trim()) gaps.push('mensaje');
+  return gaps;
+}
+
+/**
+ * Merge changes written by an external writer (the optional MCP connector) into
+ * the live state WITHOUT touching anything the user decided here: approvals,
+ * edited messages and existing research always keep the local value. Only
+ * additions are taken: new records and new message proposals.
+ */
+export function mergeExternalChanges(local: AppState, external: AppState): AppState {
+  const ids = <T extends { id: string }>(xs: T[]) => new Set(xs.map((x) => x.id));
+  const addNew = <T extends { id: string }>(have: T[], incoming: T[] | undefined) => {
+    const known = ids(have);
+    return [...have, ...(incoming ?? []).filter((x) => !known.has(x.id))];
+  };
+  const extById = new Map(external.prospects.map((p) => [p.id, p]));
+  const prospects = local.prospects.map((p) => {
+    const ext = extById.get(p.id);
+    if (!ext?.messageProposals?.length) return p;
+    const have = new Set((p.messageProposals ?? []).map((x) => x.id));
+    const incoming = ext.messageProposals.filter((x) => !have.has(x.id)).map((x) => ({ ...x, status: 'pending' as const }));
+    return incoming.length ? { ...p, messageProposals: [...(p.messageProposals ?? []), ...incoming] } : p;
+  });
+  return {
+    ...local,
+    companies: addNew(local.companies, external.companies),
+    people: addNew(local.people, external.people),
+    prospects: addNew(prospects, external.prospects),
+    activities: addNew(local.activities, external.activities),
+    researchTasks: addNew(local.researchTasks ?? [], external.researchTasks),
+    importHistory: addNew(local.importHistory ?? [], external.importHistory),
+  };
 }
 
 export function approveProspect(p: Prospect, cfg: ChannelLimitConfig): Prospect {

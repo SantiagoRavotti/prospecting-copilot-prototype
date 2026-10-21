@@ -8,6 +8,6 @@ export const EXECUTOR = {
   modelId: 'claude-sonnet-5-5',
   account: 'Pendiente de autorización. La cuenta Team no está autorizada y no se usa.',
   availability:
-    'No verificada: comprobarla exige iniciar sesión con la cuenta autorizada, que todavía no existe.',
+    'El identificador figura en el listado de modelos de Anthropic. Su disponibilidad en la cuenta autorizada NO está verificada: todavía no hay una cuenta autorizada.',
   fallback: 'Ninguno. Si Sonnet 5.5 no está disponible, la ejecución se detiene y lo informa.',
 } as const;

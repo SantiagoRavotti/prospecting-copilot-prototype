@@ -9,6 +9,7 @@ import type {
   Campaign,
   CollectedProfile,
   Company,
+  ImportRecord,
   Person,
   Prospect,
   ResearchTask,
@@ -16,6 +17,7 @@ import type {
 } from './types';
 import {
   appendBatchEvent,
+  applyProposal,
   approveProspect,
   batchSummary,
   canStartBatch,
@@ -23,12 +25,16 @@ import {
   collectedToResearch,
   dedupeVerdict,
   discardProspect,
+  dismissProposal,
+  essentialGaps,
   freezeBatch,
   newCampaign,
   newResearchTask,
   pendingRecipients,
   setPendingProspect,
 } from './campaigns';
+import { applyImport, previewImport, type ImportPreview, type PreviewContext } from './batchExchange';
+import { normalizeLinkedinUrl } from './dedupe';
 import { computeScore, normalizeSeniority, priorityForScore } from './scoring';
 import { firstNameOf, lastNameOf, nowIso, uid } from './utils';
 
@@ -202,6 +208,12 @@ export function attachCollectedToProspect(prospectId: string, collected: Collect
 // --- approval -------------------------------------------------------------------
 
 export function approve(prospectId: string): void {
+  const cur = getState();
+  const target = cur.prospects.find((p) => p.id === prospectId);
+  if (target) {
+    const gaps = essentialGaps(target, cur.people.find((x) => x.id === target.personId));
+    if (gaps.length > 0) throw new Error(`No se puede aprobar: falta ${gaps.join(', ')}.`);
+  }
   setState((prev) => ({
     ...prev,
     prospects: prev.prospects.map((p) => (p.id === prospectId ? approveProspect(p, channelLimitFor(prev)) : p)),
@@ -277,4 +289,94 @@ export function finishBatch(batchId: string, status: 'completed' | 'paused' | 'f
 export function batchPending(batchId: string) {
   const batch = (getState().batches ?? []).find((b) => b.id === batchId);
   return batch ? pendingRecipients(batch) : [];
+}
+
+// --- batch exchange with ChatGPT ------------------------------------------------------------
+
+/** Preview a pasted/selected result against the CURRENT state (pure; nothing is saved). */
+export function previewResult(rawText: string, ctx: PreviewContext): ImportPreview {
+  return previewImport(getState(), rawText, ctx);
+}
+
+/**
+ * Confirm an import. The preview is recomputed from the current state at the
+ * moment of confirming, so a stale preview can never overwrite newer edits.
+ */
+export function confirmImport(rawText: string, ctx: PreviewContext): { record: ImportRecord; preview: ImportPreview } {
+  const preview = previewImport(getState(), rawText, ctx);
+  if (preview.fatal.length > 0) throw new Error(preview.fatal[0]);
+  if (!preview.canConfirm) throw new Error('No hay nada nuevo que importar.');
+  let record!: ImportRecord;
+  setState((prev) => {
+    const out = applyImport(prev, previewImport(prev, rawText, ctx));
+    record = out.record;
+    return out.state;
+  });
+  return { record, preview };
+}
+
+export function applyMessageProposal(prospectId: string, proposalId: string): void {
+  setState((prev) => {
+    const target = prev.prospects.find((p) => p.id === prospectId);
+    if (!target) return prev;
+    const activity = logActivity(prospectId, 'message_edited', 'Propuesta de ChatGPT aplicada por el usuario.');
+    return {
+      ...prev,
+      prospects: prev.prospects.map((p) => (p.id === prospectId ? applyProposal(p, proposalId) : p)),
+      activities: [...prev.activities, activity],
+    };
+  });
+}
+
+export function dismissMessageProposal(prospectId: string, proposalId: string): void {
+  setState((prev) => ({
+    ...prev,
+    prospects: prev.prospects.map((p) => (p.id === prospectId ? dismissProposal(p, proposalId) : p)),
+  }));
+}
+
+/** Complete a missing LinkedIn URL. Refuses a URL that already belongs to someone else. */
+export function setProspectLinkedinUrl(prospectId: string, rawUrl: string): void {
+  const url = rawUrl.trim();
+  const norm = normalizeLinkedinUrl(url);
+  if (!/^linkedin\.com\/(in|pub)\/[^/]+/.test(norm)) {
+    throw new Error('La URL debe ser un perfil de LinkedIn (linkedin.com/in/…).');
+  }
+  const cur = getState();
+  const prospect = cur.prospects.find((p) => p.id === prospectId);
+  if (!prospect) throw new Error('Ficha no encontrada.');
+  const clash = cur.people.find((x) => x.id !== prospect.personId && normalizeLinkedinUrl(x.linkedinUrl) === norm);
+  if (clash) throw new Error(`Esa URL ya pertenece a ${clash.fullName}. No se asigna dos veces.`);
+  setState((prev) => ({
+    ...prev,
+    people: prev.people.map((x) => (x.id === prospect.personId ? { ...x, linkedinUrl: url } : x)),
+    prospects: prev.prospects.map((p) => (p.id === prospectId ? { ...p, lastActivityAt: nowIso() } : p)),
+  }));
+}
+
+/** Configured character target (provisional until observed on the real form). */
+export function setConfiguredLimit(limit: number): void {
+  const value = Math.max(50, Math.min(3000, Math.round(limit)));
+  setState((prev) => ({
+    ...prev,
+    channelLimits: { linkedin_invite: { ...channelLimitFor(prev), configuredLimit: value } },
+  }));
+}
+
+/** Copy a campaign's configuration (never its fichas or tasks). */
+export function duplicateCampaign(id: string): Campaign | null {
+  const src = (getState().campaigns ?? []).find((c) => c.id === id);
+  if (!src) return null;
+  return createCampaign(src.workspaceId, {
+    ...src,
+    name: `${src.name} (copia)`,
+    exclusions: [...src.exclusions],
+    styleExamples: [...(src.styleExamples ?? [])],
+    status: 'active',
+  });
+}
+
+/** Log that the package/directive was prepared (it does NOT mean ChatGPT researched anything). */
+export function logTaskPrepared(taskId: string, what: string): void {
+  setResearchTaskStatus(taskId, 'pending', what);
 }

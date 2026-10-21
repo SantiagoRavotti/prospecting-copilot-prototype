@@ -17,6 +17,19 @@ let mainWindow = null;
 
 const isDev = !app.isPackaged;
 
+// Test harnesses must never touch the user's real data: they run in a throwaway
+// userData directory. PC_FLOW keeps its directory across the restart it tests.
+(() => {
+  const flag = ['PC_FLOW', 'PC_SMOKE', 'PC_CHATGPT_PROBE'].find((f) => process.env[f]);
+  if (!flag) return;
+  const dir = process.env.PC_HARNESS_DIR || path.join(require('node:os').tmpdir(), 'pc-harness-' + flag.toLowerCase());
+  if (flag !== 'PC_FLOW' && !process.env.PC_HARNESS_DIR) fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  app.setPath('userData', dir);
+  process.env.PC_AUTOSAVE_DIR = path.join(dir, 'exports');
+  fs.mkdirSync(process.env.PC_AUTOSAVE_DIR, { recursive: true });
+})();
+
 /** Resolve the directory where user data lives (state + backups + secrets). */
 function dataDir() {
   const dir = path.join(app.getPath('userData'), 'data');
@@ -145,6 +158,41 @@ ipcMain.handle('cloud:syncNow', async () => {
   return relay.status();
 });
 ipcMain.handle('store:read', () => storeFile.readStateSync(dataDir()));
+
+// Save a text file (context package, directive, example). Real runs ask where;
+// harness runs write into the throwaway directory without a dialog.
+ipcMain.handle('files:saveText', async (_e, { defaultName, content }) => {
+  const name = String(defaultName || 'archivo.txt').replace(/[\/:*?"<>|]/g, '_');
+  const text = String(content ?? '');
+  if (text.length > 20 * 1024 * 1024) throw new Error('Archivo demasiado grande.');
+  let target;
+  if (process.env.PC_AUTOSAVE_DIR) {
+    target = path.join(process.env.PC_AUTOSAVE_DIR, name);
+  } else {
+    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+    const r = await dialog.showSaveDialog(parent, { defaultPath: path.join(app.getPath('documents'), name) });
+    if (r.canceled || !r.filePath) return null;
+    target = r.filePath;
+  }
+  fs.writeFileSync(target, text, 'utf8');
+  return { path: target };
+});
+
+// Open the user's own ChatGPT conversation in their normal browser (Chrome if it
+// is the default). Only chatgpt.com links; nothing is sent or read.
+ipcMain.handle('external:openChatGpt', async (_e, url) => {
+  let u;
+  try {
+    u = new URL(String(url));
+  } catch {
+    throw new Error('URL inválida.');
+  }
+  if (u.protocol !== 'https:' || !['chatgpt.com', 'www.chatgpt.com', 'chat.openai.com'].includes(u.hostname)) {
+    throw new Error('Solo se abren enlaces de chatgpt.com.');
+  }
+  await shell.openExternal(u.toString());
+  return { opened: u.toString() };
+});
 
 // ---------------------------------------------------------------------------
 // ChatGPT docked inside the main window (chatgptView.cjs). The user's own web
@@ -309,21 +357,24 @@ async function runRendererSmoke() {
         ),
       );
       live.cloud = cloud;
-      // ChatGPT docked next to the CRM; no BYOK anywhere in the main path.
+      // Batch-flow shell: no embedded ChatGPT by default, no BYOK, version visible.
       const ui = JSON.parse(
         await win.webContents.executeJavaScript(
-          `JSON.stringify({ dock: Boolean(document.querySelector('[data-testid="chatgpt-dock"]')), slot: (() => { const r = document.querySelector('[data-testid="chatgpt-view-slot"]')?.getBoundingClientRect(); return r ? Math.round(r.width) + 'x' + Math.round(r.height) : null; })(), byok: /BYOK|sk-ant|Clave de Anthropic/i.test(document.body.innerText), asistenteNav: Array.from(document.querySelectorAll('nav a')).some(a => a.textContent.trim() === 'Asistente') })`,
+          `JSON.stringify({ dock: Boolean(document.querySelector('[data-testid="chatgpt-dock"]')), byok: /BYOK|sk-ant|Clave de Anthropic/i.test(document.body.innerText), asistenteNav: Array.from(document.querySelectorAll('nav a')).some(a => a.textContent.trim() === 'Asistente'), chatgptNav: Array.from(document.querySelectorAll('aside button')).some(b => /ChatGPT/.test(b.textContent)), versionText: document.querySelector('[data-testid="app-version"]')?.textContent || null, aboutVersion: document.querySelector('[data-testid="about-version"]')?.textContent || null })`,
         ),
       );
+      await win.webContents.executeJavaScript(`location.hash = '#/campaigns'`);
+      await new Promise((r) => setTimeout(r, 800));
+      ui.campaignsPage = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-testid="campaigns-page"]')) && Boolean(document.querySelector('[data-testid="campaign-new"]'))`);
       await win.webContents.executeJavaScript(`location.hash = '#/cost-estimator'`);
       await new Promise((r) => setTimeout(r, 800));
       ui.costsApiTokens = await win.webContents.executeJavaScript(`/tokens? de entrada|input tokens|Batch API|per 1M|por 1M/i.test(document.body.innerText)`);
       ui.costsPage = await win.webContents.executeJavaScript(`Boolean(document.querySelector('[data-testid="costs-table"]'))`);
-      ui.view = await chatgptView.status();
+      ui.expectedVersion = app.getVersion();
       live.ui = ui;
       console.log('SMOKE_RESULT ' + probe + ' LIVE ' + JSON.stringify(live));
       const r = JSON.parse(probe);
-      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) && live.cloud.section && !live.cloud.tunnelMentioned && live.ui.dock && live.ui.view.attached && !live.ui.byok && !live.ui.asistenteNav && live.ui.costsPage && !live.ui.costsApiTokens ? 0 : 1);
+      app.exit(r.desktopMode && r.hasSidebar && (live.skipped || (live.inState && live.fichas > 0)) && live.cloud.section && !live.cloud.tunnelMentioned && !live.ui.dock && !live.ui.chatgptNav && !live.ui.byok && !live.ui.asistenteNav && live.ui.campaignsPage && live.ui.costsPage && !live.ui.costsApiTokens && String(live.ui.versionText).includes('v' + live.ui.expectedVersion) && String(live.ui.aboutVersion).includes(live.ui.expectedVersion) ? 0 : 1);
     } catch (e) {
       console.error('SMOKE_ERROR ' + e.message);
       app.exit(1);
@@ -472,6 +523,21 @@ async function runChatGptProbe() {
 app.whenReady().then(() => {
   // Expose where state lives so the preload can boot-read it synchronously.
   process.env.PC_DATA_DIR = dataDir();
+  if (process.env.PC_CLOUD_STATUS === '1') {
+    // Read-only check of the saved cloud session (same thing the app does at startup).
+    relay.init({ dataDir, safeStorage, crmTools, storeFile, appVersion: app.getVersion(), onApplied: () => {} });
+    setTimeout(async () => {
+      const st = await relay.status();
+      const mask = (e) => (e ? e.replace(/^(.{2}).*(@.*)$/, '$1***$2') : null);
+      console.log('CLOUD_STATUS ' + JSON.stringify({ connected: st.connected, email: mask(st.email), lastPushAt: st.lastPushAt, lastPollAt: st.lastPollAt, lastError: st.lastError, encryptionAvailable: st.encryptionAvailable, storedSessionEntries: st.storedSessionEntries, sessionFileReadable: st.sessionFileReadable }));
+      app.exit(0);
+    }, 6000);
+    return;
+  }
+  if (process.env.PC_FLOW === '1') {
+    require('./flowHarness.cjs').runFlow({ app, createWindow, dataDir });
+    return;
+  }
   if (process.env.PC_CHATGPT_PROBE === '1') {
     void runChatGptProbe();
     return;

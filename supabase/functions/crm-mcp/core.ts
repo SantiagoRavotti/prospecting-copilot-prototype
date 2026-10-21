@@ -137,7 +137,7 @@ export const TOOLS = [
   {
     name: 'save_draft',
     description:
-      'Save a new draft message for an existing prospect (previous versions are kept; any prior approval is invalidated).',
+      'Propose a new draft message for an existing prospect. It is stored as a proposal the user can apply; it never overwrites an edited or approved message.',
     inputSchema: {
       type: 'object',
       properties: { prospect_id: str, draft_message: str, reason: str },

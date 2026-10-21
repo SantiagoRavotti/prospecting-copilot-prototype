@@ -1,7 +1,6 @@
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import {
   BarChart3,
-  Bot,
   Building2,
   CalendarClock,
   Calculator,
@@ -26,7 +25,8 @@ import FollowUps from './pages/FollowUps';
 import Pipeline from './pages/Pipeline';
 import Opportunities from './pages/Opportunities';
 import ChatGptDock, { DOCK_WIDTH_CSS } from './components/ChatGptDock';
-import { setDockOpen, useDockOpen } from './lib/dockStore';
+import { useDockOpen } from './lib/dockStore';
+import { APP_VERSION } from './lib/appVersion';
 import Campaigns from './pages/Campaigns';
 import Analytics from './pages/Analytics';
 import { isDesktopMode } from './lib/desktop';
@@ -90,7 +90,9 @@ export default function App() {
               <p className="text-sm font-semibold leading-tight text-slate-900">
                 Prospecting Copilot
               </p>
-              <p className="text-[11px] leading-tight text-slate-400">Prototype — local only</p>
+              <p className="text-[11px] leading-tight text-slate-400" data-testid="app-version">
+                {isDesktopMode() ? `Escritorio · v${APP_VERSION}` : `Prototype — local only · v${APP_VERSION}`}
+              </p>
             </div>
           </div>
         </div>
@@ -136,22 +138,6 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
-
-        {isDesktopMode() && (
-          <div className="px-3 pb-3">
-            <button
-              onClick={() => setDockOpen(!dockOpen)}
-              className={cn(
-                'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium',
-                dockOpen ? 'bg-brand-600 text-white' : 'bg-brand-50 text-brand-700 hover:bg-brand-100',
-              )}
-              data-testid="dock-toggle"
-            >
-              <Bot className="h-4 w-4 shrink-0" />
-              {dockOpen ? 'Ocultar ChatGPT' : 'ChatGPT'}
-            </button>
-          </div>
-        )}
 
         <div className="border-t border-slate-100 px-5 py-3">
           {isCloudMode() ? (

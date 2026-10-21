@@ -41,17 +41,36 @@ const SESSION_FILE = () => path.join(deps.dataDir(), 'cloud-session.bin');
 const APPLIED_FILE = () => path.join(deps.dataDir(), 'relay-applied.json');
 let sessionCache = {};
 
+let sessionFileReadable = null; // null = no file, true = decrypted, false = present but unreadable
+
 function loadSessionStore() {
+  let buf;
   try {
-    const buf = fs.readFileSync(SESSION_FILE());
-    sessionCache = JSON.parse(deps.safeStorage.decryptString(buf));
+    buf = fs.readFileSync(SESSION_FILE());
   } catch {
     sessionCache = {};
+    sessionFileReadable = null;
+    return;
+  }
+  try {
+    sessionCache = JSON.parse(deps.safeStorage.decryptString(buf));
+    sessionFileReadable = true;
+  } catch {
+    // Present but undecryptable (e.g. the OS key changed). Keep the file untouched
+    // so nothing is destroyed by merely failing to read it.
+    sessionCache = {};
+    sessionFileReadable = false;
   }
 }
 function saveSessionStore() {
   if (!deps.safeStorage.isEncryptionAvailable()) return; // never store unencrypted
-  fs.writeFileSync(SESSION_FILE(), deps.safeStorage.encryptString(JSON.stringify(sessionCache)));
+  if (sessionFileReadable === false && Object.keys(sessionCache).length === 0) return; // don't clobber what we could not read
+  // Atomic: a crash or a second app instance can never leave a half-written file.
+  const target = SESSION_FILE();
+  const tmp = `${target}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, deps.safeStorage.encryptString(JSON.stringify(sessionCache)));
+  fs.renameSync(tmp, target);
+  sessionFileReadable = true;
 }
 const storage = {
   getItem: (k) => (k in sessionCache ? sessionCache[k] : null),
@@ -261,6 +280,8 @@ async function status() {
     email: user ? user.email : null,
     connectorUrl: `${cloud.SUPABASE_URL}/functions/v1/crm-mcp/mcp`,
     encryptionAvailable: deps ? deps.safeStorage.isEncryptionAvailable() : false,
+    storedSessionEntries: Object.keys(sessionCache).length,
+    sessionFileReadable: sessionFileReadable,
     ...stats,
   };
 }
